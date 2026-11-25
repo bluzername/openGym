@@ -28,7 +28,7 @@ import WorkoutScrollAnchor from '../components/WorkoutScrollAnchor.jsx'
 import WorkoutChips from '../components/WorkoutChips.jsx'
 import { filmSetSheet, SetVideoBadge, ActiveSetVideo } from '../components/SetVideo.jsx'
 import { formCheckSheet, useFormCheckAvailable } from '../components/FormCheckSheet.jsx'
-import { isSquatPattern } from '../lib/form-check.js'
+import { drillFor } from '../lib/form-drills/index.js'
 import { setVideoOf, filmTarget } from '../lib/set-videos.js'
 import { fmtClip } from '../lib/media-refs.js'
 import { supersetMeta } from '../lib/superset-meta.js'
@@ -592,9 +592,12 @@ function ExerciseBlock({ entryIdx, compact, listed, dense, editing, onToggle, on
   // Settings → Modules → Effort off: no cardio chip either (the set menu keeps its row).
   const effortOn = isOn(S, 'effort')
   const filmAt = videosOn ? filmTarget(entry) : -1
-  // Form check (components/FormCheckSheet.jsx): squats only, on an iPhone that can run it.
-  const formCheckOk = useFormCheckAvailable() && isSquatPattern(ex)
-  const openFormCheck = () => formCheckSheet({ title: exerciseNameFor(ex), onUse: editing ? null : useCountedReps })
+  // Form check (components/FormCheckSheet.jsx): an exercise some drill judges (lib/form-drills/),
+  // on an iPhone that can run it.
+  const formCheckOn = useFormCheckAvailable()
+  const drill = formCheckOn ? drillFor(ex) : null
+  const formCheckOk = !!drill
+  const openFormCheck = () => formCheckSheet({ title: exerciseNameFor(ex), drill, onUse: editing ? null : useCountedReps })
   // The same on the drawing's top corner, one tap away mid-workout (the tap must not pause the clip).
   const formCheckBtn = formCheckOk
     ? <button className="formcheck-btn" aria-label={t('Form check')} title={t('Form check')} onClick={e => { e.stopPropagation(); openFormCheck() }}><Icon name="camera" /></button>
@@ -627,7 +630,7 @@ function ExerciseBlock({ entryIdx, compact, listed, dense, editing, onToggle, on
         onKeepWarmups && { icon: 'sunrise', label: t('Keep these warm-ups'), sub: t('Saved in the routine, scaled to your work weight'), onClick: onKeepWarmups },
         onRest && { icon: 'timer', label: t('Rest timer'), sub: restSub, onClick: onRest },
         { icon: 'history', label: t('History'), sub: last ? t('Last time') + ' ' + fmtDate(last.d) : undefined, onClick: () => exerciseHistorySheet(entry.id) },
-        formCheckOk && { icon: 'camera', label: t('Form check'), sub: t('Counts your squats with the camera'), onClick: openFormCheck },
+        formCheckOk && { icon: 'camera', label: t('Form check'), sub: drill.kind === 'hold' ? t('Times your hold with the camera') : t('Counts your reps with the camera'), onClick: openFormCheck },
         // The Coach on this exercise, for the rest of this workout (components/WorkoutCoachSheet.jsx).
         onAskCoach && { icon: 'sparkles', label: t('Ask the Coach'), sub: t('It hurts, it’s taken, no time, feeling great'), onClick: onAskCoach },
       ] },

@@ -4328,7 +4328,7 @@ export const PT_BR_OVERRIDES = {
   "Follows the main page. Switch this on to pick the details and buttons for this type yourself.": "Segue a página principal. Ative isto para escolher você mesmo os detalhes e os botões deste tipo.",
   // Ready by heart rate on the watches (docs/dev/REST_BY_HEART_RATE.md)
   "During a rest, the watch says Ready once your heart rate is back down, with one tap if the wrist taps below are on. The countdown keeps running. Automatic aims a little above your heart rate before the set.": "Durante o descanso, o relógio mostra Pronto quando sua frequência cardíaca volta a cair, com um toque se o toque no pulso abaixo estiver ativado. A contagem regressiva continua. Automático mira um pouco acima da sua frequência cardíaca antes da série.",
-  // Form check for squats on the iPhone (components/FormCheckSheet.jsx, lib/form-check.js)
+  // Form check for squats on the iPhone (components/FormCheckSheet.jsx, lib/form-drills/)
   "Above parallel": "Acima do paralelo",
   "Back camera": "Câmera traseira",
   "Below parallel": "Abaixo do paralelo",
@@ -4368,7 +4368,7 @@ export const PT_BR_OVERRIDES = {
   "{0}° at the knee": "{0}° no joelho",
   "Use {0} rep": "Usar reps: {0}",
   "Use {0} reps": "Usar reps: {0}",
-  // Form check: the depth a rep counts from, no-reps and the result tiles (components/FormCheckSheet.jsx, lib/form-check.js)
+  // Form check: the depth a rep counts from, no-reps and the result tiles (components/FormCheckSheet.jsx, lib/form-drills/)
   "Counts from": "Conta a partir de",
   "Any depth": "Qualquer profundidade",
   "Too shallow": "Pouco profunda",
@@ -4388,6 +4388,33 @@ export const PT_BR_OVERRIDES = {
   "Not counted: too shallow": "Não contou: pouco profunda",
   "Reps that did not count: {0}. The hip stayed above the knee.": "Repetições que não contaram: {0}. O quadril ficou acima do joelho.",
   "Reps that did not count: {0}. The hip did not get below the knee.": "Repetições que não contaram: {0}. O quadril não desceu abaixo do joelho.",
+  // Form check drills, any camera angle (lib/form-drills/, components/FormCheckSheet.jsx)
+  "Centred over the feet": "Centralizado sobre os pés",
+  "Counts your reps with the camera": "Conta suas repetições com a câmera",
+  "Depth could not be judged from this angle. Put the phone at knee height and level, or film from the side.": "Não deu para avaliar a profundidade deste ângulo. Coloque o celular na altura dos joelhos e reto, ou filme de lado.",
+  "Face the camera": "Fique de frente para a câmera",
+  "Filmed at an angle: depth and tempo only.": "Filmado na diagonal: só profundidade e ritmo.",
+  "Filmed from the front: depth, tempo, knees and hips.": "Filmado de frente: profundidade, ritmo, joelhos e quadril.",
+  "Filmed from the side: depth, tempo, knee angle and torso lean.": "Filmado de lado: profundidade, ritmo, ângulo do joelho e inclinação do tronco.",
+  "Inside the ankles": "Por dentro dos tornozelos",
+  "Knee angle": "Ângulo do joelho",
+  "Knees": "Joelhos",
+  "Measured from a 2D camera view: a guide, not a verdict.": "Medido a partir de uma imagem 2D da câmera: uma referência, não um veredito.",
+  "No reps were counted. Get your whole body in the frame and try again.": "Nenhuma repetição foi contada. Coloque o corpo inteiro no enquadramento e tente de novo.",
+  "Over the feet": "Sobre os pés",
+  "Put the phone at knee height and level": "Coloque o celular na altura dos joelhos e reto",
+  "Seconds held in position": "Segundos mantidos na posição",
+  "Shifted to your left": "Deslocado para a sua esquerda",
+  "Shifted to your right": "Deslocado para a sua direita",
+  "The camera lost you during most reps. Keep your whole body in the frame.": "A câmera perdeu você na maioria das repetições. Mantenha o corpo inteiro no enquadramento.",
+  "The hips drifted to your left at the bottom of most reps. Try keeping your weight even on both feet.": "Embaixo, na maioria das repetições, o quadril foi para a sua esquerda. Tente manter o peso igual nos dois pés.",
+  "The hips drifted to your right at the bottom of most reps. Try keeping your weight even on both feet.": "Embaixo, na maioria das repetições, o quadril foi para a sua direita. Tente manter o peso igual nos dois pés.",
+  "The knees came inside the ankles at the bottom of most reps. Try pushing them out over the toes.": "Embaixo, na maioria das repetições, os joelhos vieram para dentro dos tornozelos. Tente empurrá-los para fora, por cima dos dedos dos pés.",
+  "Times your hold with the camera": "Cronometra sua posição com a câmera",
+  "Turn halfway towards the camera": "Vire-se pela metade para a câmera",
+  "came inside the ankles": "vieram para dentro",
+  "Squat": "Agachamento",
+  "Phone at knee height and level, 2 to 3 m away, your whole body in the frame. Side-on it also measures the torso lean; from the front, the knees and the hips.": "Celular na altura dos joelhos e reto, a 2 a 3 m, o corpo inteiro no enquadramento. De lado também mede a inclinação do tronco; de frente, os joelhos e o quadril.",
 }
 
 export default { ...pt, ...PT_BR_OVERRIDES }

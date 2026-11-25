@@ -5,9 +5,9 @@ import UIKit
 import Vision
 
 /**
- * Form check for squats (lib/form-check-native.js): the camera full screen over the web view, with
- * Vision's 2D body pose drawn on it as a skeleton, and the joints sent to the page about 15 times a
- * second. The page counts the reps and measures them (lib/form-check.js); this side only sees.
+ * Form check (lib/form-check-native.js): the camera full screen over the web view, with Vision's
+ * 2D body pose drawn on it as a skeleton, and the joints sent to the page about 15 times a second.
+ * The page's drill counts the reps and measures them (lib/form-drills/); this side only sees.
  * No frame is recorded, kept or sent anywhere: each one is read by Vision and dropped.
  *
  * Usage from JS:
@@ -16,8 +16,9 @@ import Vision
  *   FormCheck.addListener('pose', e => ...)          { t: ms, aspect: w / h, joints: { leftHip: [x, y, conf], ... } }
  *   FormCheck.addListener('closed', () => ...)       Done tapped, or stop()
  *   await FormCheck.start({ camera: 'back' | 'front', labels: { done, flip } })
- *   await FormCheck.setStatus({ text, reps, reached }) the status line, the big rep count, and
- *                                                    whether the rep under way is deep enough (the hips light up)
+ *   await FormCheck.setStatus({ text, reps, highlight }) the status line, the big count, and the
+ *                                                    joints drawn large and green ([] none): the rep
+ *                                                    under way meets the standard (the drill's choice)
  *   await FormCheck.feedback({ kind, text })         'counted': a green flash of the screen edge and a
  *                                                    light tap; 'missed': a red flash and an error buzz,
  *                                                    `text` read out to VoiceOver. The count does not move.
@@ -86,9 +87,9 @@ public class FormCheckPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func setStatus(_ call: CAPPluginCall) {
         let text = call.getString("text") ?? ""
         let reps = call.getInt("reps") ?? 0
-        let reached = call.getBool("reached") ?? false
+        let highlight = Set(call.getArray("highlight", String.self) ?? [])
         DispatchQueue.main.async {
-            self.shown?.setStatus(text, reps: reps, reached: reached)
+            self.shown?.setStatus(text, reps: reps, highlight: highlight)
             call.resolve()
         }
     }
@@ -267,8 +268,8 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
         }
     }
 
-    func setStatus(_ text: String, reps count: Int, reached: Bool) {
-        skeleton.reached = reached
+    func setStatus(_ text: String, reps count: Int, highlight: Set<String>) {
+        skeleton.highlight = highlight
         status.text = text
         status.isHidden = text.isEmpty
         let shownCount = String(count)
@@ -391,8 +392,8 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
 final class SkeletonView: UIView {
     var imageRect: CGRect = .zero
     var joints: [String: CGPoint] = [:] { didSet { setNeedsDisplay() } }
-    /// The rep under way is deep enough to count: the hips are drawn larger and green.
-    var reached = false { didSet { if reached != oldValue { setNeedsDisplay() } } }
+    /// The joints the drill lights up once the rep under way meets its standard: larger and green.
+    var highlight: Set<String> = [] { didSet { if highlight != oldValue { setNeedsDisplay() } } }
 
     private static let bones: [(String, String)] = [
         ("nose", "neck"), ("neck", "leftShoulder"), ("neck", "rightShoulder"),
@@ -423,11 +424,11 @@ final class SkeletonView: UIView {
             let c = place(p)
             ctx.fillEllipse(in: CGRect(x: c.x - 5, y: c.y - 5, width: 10, height: 10))
         }
-        guard reached else { return }
+        guard !highlight.isEmpty else { return }
         ctx.setFillColor(UIColor.systemGreen.cgColor)
         ctx.setStrokeColor(UIColor.white.cgColor)
         ctx.setLineWidth(3)
-        for key in ["leftHip", "rightHip"] {
+        for key in highlight {
             guard let p = joints[key] else { continue }
             let c = place(p)
             let dot = CGRect(x: c.x - 11, y: c.y - 11, width: 22, height: 22)

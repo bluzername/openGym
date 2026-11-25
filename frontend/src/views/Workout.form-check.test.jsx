@@ -12,7 +12,7 @@ vi.mock('../lib/sound.js', () => ({ beep: vi.fn(), chime: vi.fn(), vibrate: vi.f
 vi.mock('../lib/api.js', () => ({ api: vi.fn(() => Promise.resolve({})), appBase: () => '/' }))
 vi.mock('../lib/form-check-native.js', () => ({
   formCheckAvailable: () => Promise.resolve(h.available),
-  runSquatCheck: opts => { h.runs.push(opts); return Promise.resolve(h.result) },
+  runFormCheck: opts => { h.runs.push(opts); return Promise.resolve(h.result) },
 }))
 
 const { default: Workout } = await import('./Workout.jsx')
@@ -64,14 +64,14 @@ beforeEach(() => {
   localStorage.clear()
   useUI.setState({ sheets: [], toastMsg: '', timer: null, work: null })
   h.available = true; h.runs = []
+  // Seven counted and one too shallow: "Use 7 reps" takes the counted ones only.
+  const rep = (counted, depth) => ({ counted, reason: counted ? null : 'shallow', lost: false, measures: { view: 'side', depth, downSec: 2, upSec: 1 } })
   h.result = {
-    // Seven counted and one too shallow: "Use 7 reps" takes the counted ones only.
-    reps: [
-      ...Array.from({ length: 7 }, () => ({ depth: 'below', minKnee: 55, downSec: 2, upSec: 1, lean: 40, lost: false, counted: true, reason: null })),
-      { depth: 'above', minKnee: 96, downSec: 1, upSec: 1, lean: 30, lost: false, counted: false, reason: 'shallow' },
-    ],
-    summary: { count: 7, missed: 1, depthBelow: 7, depthParallel: 0, depthAbove: 0, avgDown: 2, avgUp: 1, maxLean: 40, consistency: 2 },
-    cue: 'Reps that did not count: 1. The hip stayed above the knee.', cueId: 'missed', standard: 'parallel',
+    count: 7, missed: 1,
+    reps: [...Array.from({ length: 7 }, () => rep(true, 'below')), rep(false, 'above')],
+    tiles: [{ id: 'depth', label: 'Depth', value: '7 of 8', sub: 'at parallel or deeper' }],
+    details: Array.from({ length: 8 }, () => [{ label: 'Depth', value: 'Below parallel' }]),
+    cue: 'Reps that did not count: 1. The hip stayed above the knee.', cueId: 'missed', standard: 'parallel', drill: 'squat', kind: 'reps',
   }
   root = null; container = null; sheetRoot = null; sheetContainer = null
 })
@@ -85,9 +85,11 @@ afterEach(() => {
 })
 
 describe('Form check on the exercise menu', () => {
-  it('is there for a squat on an iPhone that can run it', async () => {
+  it('is there for an exercise a drill judges (a squat) on an iPhone that can run it', async () => {
     await renderWorkout([entry(SQUAT)])
-    expect(menuItem(openMenu(), 'Form check')).toBeTruthy()
+    const item = menuItem(openMenu(), 'Form check')
+    expect(item).toBeTruthy()
+    expect(item.textContent).toContain('Counts your reps with the camera')
   })
 
   it('is a button on the drawing too, top corner, and opens the same sheet', async () => {
@@ -121,6 +123,8 @@ describe('Form check on the exercise menu', () => {
     const item = menuItem(openMenu(), 'Form check')
     act(() => item.click())
     const intro = renderTopSheet()
+    // The setup line is the drill's: no longer side-on only.
+    expect(intro.textContent).toContain('Phone at knee height and level')
     act(() => button(intro, 'Front camera').click())
     act(() => button(intro, 'Below parallel').click())
     await act(async () => { button(intro, 'Start').click(); await Promise.resolve(); await Promise.resolve() })

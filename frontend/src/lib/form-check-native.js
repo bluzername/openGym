@@ -1,17 +1,18 @@
-// The page's side of Form check (FormCheckPlugin.swift, lib/form-check.js). The iPhone app shows
+// The page's side of Form check (FormCheckPlugin.swift, lib/form-drills/). The iPhone app shows
 // the camera full screen with the skeleton over it and sends the pose about 15 times a second;
-// this feeds the poses to the tracker, tells the native view what to say on its status line,
+// this feeds the poses to the drill's tracker, puts the tracker's hint on the native status line,
 // says each rep's number aloud, and hands back the tracker's result once the view closes.
-// A rep that did not meet the lifter's standard is said too ("Too shallow"), flashed red with a
-// buzz, and its reason stays on the status line for MISS_SHOW_MS; the count does not move.
-// Nothing is filmed or kept: the frames never leave the native side, only joint positions do.
+// A rep that did not meet the lifter's standard is said too (the drill's `misses`), flashed red
+// with a buzz, and its line stays on the status line for MISS_SHOW_MS; the count does not move.
+// Nothing here knows a movement. Nothing is filmed or kept: the frames never leave the native
+// side, only joint positions do.
 //
 // iPhone only. Anywhere else (the web, Android, a build without the plugin, the simulator, which
 // has no camera) formCheckAvailable() resolves false and nothing offers it.
 import { MOBILE } from './mobile.js'
 import { t } from './i18n-core.js'
 import { speak } from './speech.js'
-import { createTracker, framing } from './form-check.js'
+import { drillById } from './form-drills/index.js'
 
 /** How long the status line shows why a rep did not count, in ms of the pose clock. */
 export const MISS_SHOW_MS = 2000
@@ -36,36 +37,31 @@ export function formCheckAvailable() {
     .catch(() => false))
 }
 
-/** What the status line says while the pose cannot be judged (lib/form-check.js framing). */
-export function framingHint(reason) {
-  switch (reason) {
-    case 'none': return t('Step into the frame')
-    case 'partial': return t('Get your whole body in the frame')
-    case 'facing': return t('Turn side-on to the camera')
-    case 'far': return t('Come a little closer')
-    default: return ''
-  }
-}
-
-/** The status line for a rep that did not count, by its reason (lib/form-check.js). */
-export function missedHint(reason) {
-  return reason === 'shallow' ? t('Too shallow. Not counted.') : t('Not counted')
+/** The status line for a rep that did not count: the drill's line for its reason. */
+export function missedHint(drill, reason) {
+  const m = drill && drill.misses && drill.misses[reason]
+  return m ? t(m.line) : t('Not counted')
 }
 // What is said aloud for it: as short as a rep's number.
-const missedSay = () => t('Too shallow')
+const missedSay = (drill, reason) => {
+  const m = drill && drill.misses && drill.misses[reason]
+  return m ? t(m.say) : t('Not counted')
+}
 
 /**
- * Starts the camera view and resolves with the tracker's result when the lifter taps Done.
- * `voice`: lib/speech.js voiceOpts(S). Each rep is said even with Spoken cues off: the phone is
- * propped up out of reach. `drill` and `standard`: lib/form-check.js DRILLS, the standard a rep
- * must meet to count (the drill's default when left out). Rejects when the view cannot open (no
- * camera access, no plugin).
+ * Starts the camera view for a drill (lib/form-drills/) and resolves with its tracker's result
+ * when the lifter taps Done. `voice`: lib/speech.js voiceOpts(S). Each rep is said even with
+ * Spoken cues off: the phone is propped up out of reach. `standard`: the drill's standard a rep
+ * must meet to count (its default when left out). Rejects when the drill is unknown or the view
+ * cannot open (no camera access, no plugin).
  */
-export async function runSquatCheck({ camera = 'back', onUpdate, voice = {}, drill = 'squat', standard } = {}) {
+export async function runFormCheck({ drill: drillId, camera = 'back', onUpdate, voice = {}, standard } = {}) {
+  const drill = drillById(drillId)
+  if (!drill) throw new Error('unknown drill: ' + drillId)
   const p = await formPlugin()
   if (!p) throw new Error('unavailable')
   const { FormCheck } = p
-  const tracker = createTracker({ drill, standard })
+  const tracker = drill.create({ standard: drill.standards.some(s => s.id === standard) ? standard : drill.defaultStandard })
   let shown = null
   let missUntil = -1, missText = ''
   const subs = []
@@ -74,28 +70,26 @@ export async function runSquatCheck({ camera = 'back', onUpdate, voice = {}, dri
   const onPose = frame => {
     const now = tracker.push(frame)
     const at = Number(frame && frame.t) || 0
-    if (now.justMissed) { missUntil = at + MISS_SHOW_MS; missText = missedHint(now.reason) }
-    const why = framing(frame)
-    const text = why ? framingHint(why)
-      : at < missUntil ? missText
-        : now.phase === 'waiting' ? t('Stand tall to start')
-          : now.reps ? '' : t('Ready. Squat when you are.')
-    // The bridge is only crossed when the line, the count or the depth reached changes, not 15
-    // times a second. `reached`: the rep under way already meets the standard (the hip lights up).
-    const key = text + '|' + now.reps + '|' + now.reached
+    if (now.justMissed) { missUntil = at + MISS_SHOW_MS; missText = missedHint(drill, now.reason) }
+    // A framing problem says so first; otherwise a no-rep's line for a moment, else the drill's hint.
+    const text = now.inFrame && at < missUntil ? missText : now.hint || ''
+    const highlight = Array.isArray(now.highlight) ? now.highlight : []
+    // The bridge is only crossed when the line, the count or the joints lit change, not 15 times
+    // a second. `highlight`: the joints drawn large once the rep under way meets the standard.
+    const key = text + '|' + now.count + '|' + highlight.join(',')
     if (key !== shown) {
       shown = key
-      FormCheck.setStatus({ text, reps: now.reps, reached: now.reached }).catch(() => {})
+      FormCheck.setStatus({ text, reps: now.count, highlight }).catch(() => {})
     }
     // A number cuts off whatever is still being said, so it is never late; a no-rep is queued
     // behind it instead, so it never talks over one. feedback() is the flash and the buzz; a
     // build without it just rejects.
     if (now.justCounted) {
-      speak(String(now.reps), { ...voice, onSilent: true, queue: false }).catch?.(() => {})
+      speak(String(now.count), { ...voice, onSilent: true, queue: false }).catch?.(() => {})
       FormCheck.feedback?.({ kind: 'counted' })?.catch?.(() => {})
     }
     if (now.justMissed) {
-      speak(missedSay(now.reason), { ...voice, onSilent: true, queue: true }).catch?.(() => {})
+      speak(missedSay(drill, now.reason), { ...voice, onSilent: true, queue: true }).catch?.(() => {})
       FormCheck.feedback?.({ kind: 'missed', text: missText })?.catch?.(() => {})
     }
     if (onUpdate) onUpdate({ ...now, hint: text })
@@ -107,7 +101,7 @@ export async function runSquatCheck({ camera = 'back', onUpdate, voice = {}, dri
       if (done) return
       done = true
       drop()
-      resolve(tracker.result())
+      resolve({ ...tracker.result(), drill: drill.id, kind: drill.kind })
     }
     subs.push(FormCheck.addListener('pose', onPose))
     subs.push(FormCheck.addListener('closed', finish))
@@ -122,8 +116,8 @@ export async function runSquatCheck({ camera = 'back', onUpdate, voice = {}, dri
   })
 }
 
-/** Closes the camera view from the page (the result still arrives through runSquatCheck). */
-export function stopSquatCheck() {
+/** Closes the camera view from the page (the result still arrives through runFormCheck). */
+export function stopFormCheck() {
   return formPlugin().then(p => (p ? p.FormCheck.stop() : null)).catch(() => null)
 }
 
