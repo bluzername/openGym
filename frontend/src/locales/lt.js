@@ -5936,7 +5936,7 @@ export default {
   "{0} below parallel": "{0} žemiau lygiagretės",
   "{0}° at the knee": "{0}° ties keliu",
   "Use {0} rep": "Naudoti kartojimus: {0}",
-  "Use {0} reps": "Naudoti kartojimus: {0}",
+  "Use {0} reps": { one: "Įrašyti {0} kartojimą", few: "Įrašyti {0} kartojimus", many: "Įrašyti {0} kartojimo", other: "Įrašyti {0} kartojimų" },
   // Form check: the depth a rep counts from, no-reps and the result tiles (components/FormCheckSheet.jsx, lib/form-check.js)
   "Counts from": "Skaičiuoja nuo",
   "Any depth": "Bet koks gylis",

@@ -770,8 +770,8 @@ h4.sec{
   .conn-bar,.whdr.stick,.stats-index,.gl-sticky{background:var(--bg)}
   /* The badges over an animation and the dim behind a sheet: no frost, and the badge gets a
      darker pill so its white text no longer depends on what the picture shows behind it. */
-  .exmedia .gifhint,.exmedia .giftoggle,.mback{-webkit-backdrop-filter:none;backdrop-filter:none}
-  .exmedia .gifhint,.exmedia .giftoggle{background:rgba(0,0,0,.8)}
+  .exmedia .gifhint,.exmedia .giftoggle,.exmedia .formcheck-btn,.mback{-webkit-backdrop-filter:none;backdrop-filter:none}
+  .exmedia .gifhint,.exmedia .giftoggle,.exmedia .formcheck-btn{background:rgba(0,0,0,.8)}
 }
 
 /* ------------------------------------------------------------ week strip -- */
