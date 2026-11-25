@@ -1374,6 +1374,12 @@ button.whdr-gym{color:var(--acc-ink);cursor:pointer}
   font-size:var(--fs-caption);font-weight:500;
   -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
 }
+.exmedia .formcheck-btn{
+  position:absolute;top:9px;inset-inline-end:9px;width:40px;height:40px;border-radius:99px;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.45);color:#fff;font-size:var(--fs-body);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+}
 .exmedia .gifhint{inset-inline-end:9px}
 .exmedia .giftoggle{inset-inline-start:9px}
 .exmedia .gifhint .icn,.exmedia .giftoggle .icn{font-size:var(--fs-footnote)}

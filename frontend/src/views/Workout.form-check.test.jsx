@@ -86,6 +86,20 @@ describe('Form check on the exercise menu', () => {
     expect(menuItem(openMenu(), 'Form check')).toBeTruthy()
   })
 
+  it('is a button on the drawing too, top corner, and opens the same sheet', async () => {
+    await renderWorkout([entry(SQUAT)])
+    const btn = document.querySelector('.exmedia .formcheck-btn')
+    expect(btn).toBeTruthy()
+    expect(btn.getAttribute('aria-label')).toBe('Form check')
+    act(() => btn.click())
+    expect(button(renderTopSheet(), 'Start')).toBeTruthy()
+  })
+
+  it('has no button on the drawing of a bench press, or where it cannot run', async () => {
+    await renderWorkout([entry(BENCH)])
+    expect(document.querySelector('.formcheck-btn')).toBeNull()
+  })
+
   it('is not there for a bench press', async () => {
     await renderWorkout([entry(BENCH)])
     expect(menuItem(openMenu(), 'Form check')).toBeFalsy()

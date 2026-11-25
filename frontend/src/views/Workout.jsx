@@ -594,6 +594,11 @@ function ExerciseBlock({ entryIdx, compact, listed, dense, editing, onToggle, on
   const filmAt = videosOn ? filmTarget(entry) : -1
   // Form check (components/FormCheckSheet.jsx): squats only, on an iPhone that can run it.
   const formCheckOk = useFormCheckAvailable() && isSquatPattern(ex)
+  const openFormCheck = () => formCheckSheet({ title: exerciseNameFor(ex), onUse: editing ? null : useCountedReps })
+  // The same on the drawing's top corner, one tap away mid-workout (the tap must not pause the clip).
+  const formCheckBtn = formCheckOk
+    ? <button className="formcheck-btn" aria-label={t('Form check')} title={t('Form check')} onClick={e => { e.stopPropagation(); openFormCheck() }}><Icon name="camera" /></button>
+    : null
   // "Use N reps": the reps of the set in progress, the first open work set, not ticked. A set done
   // one side at a time has no single reps field, so it is passed over.
   const useCountedReps = n => {
@@ -622,7 +627,7 @@ function ExerciseBlock({ entryIdx, compact, listed, dense, editing, onToggle, on
         onKeepWarmups && { icon: 'sunrise', label: t('Keep these warm-ups'), sub: t('Saved in the routine, scaled to your work weight'), onClick: onKeepWarmups },
         onRest && { icon: 'timer', label: t('Rest timer'), sub: restSub, onClick: onRest },
         { icon: 'history', label: t('History'), sub: last ? t('Last time') + ' ' + fmtDate(last.d) : undefined, onClick: () => exerciseHistorySheet(entry.id) },
-        formCheckOk && { icon: 'camera', label: t('Form check'), sub: t('Counts your squats with the camera'), onClick: () => formCheckSheet({ title: exerciseNameFor(ex), onUse: editing ? null : useCountedReps }) },
+        formCheckOk && { icon: 'camera', label: t('Form check'), sub: t('Counts your squats with the camera'), onClick: openFormCheck },
         // The Coach on this exercise, for the rest of this workout (components/WorkoutCoachSheet.jsx).
         onAskCoach && { icon: 'sparkles', label: t('Ask the Coach'), sub: t('It hurts, it’s taken, no time, feeling great'), onClick: onAskCoach },
       ] },
@@ -953,7 +958,7 @@ function ExerciseBlock({ entryIdx, compact, listed, dense, editing, onToggle, on
   return <>
     {/* Animations set to Small: a thumbnail beside the name instead of a strip above it, so the
         first set is on screen without scrolling; a tap brings the full animation back. */}
-    {!dense && !thumb && <Media ex={ex} notes={entry.target?.notes} key={entry.id} compact={compact} minimizable sayAs={exSay} />}
+    {!dense && !thumb && <Media ex={ex} notes={entry.target?.notes} key={entry.id} compact={compact} minimizable sayAs={exSay} corner={formCheckBtn} />}
     <div className="row between exhd" style={{ marginBottom: 8 }}>
       {thumb && <WorkoutThumb ex={ex} dense={dense} sayAs={exSay} onExpand={dense ? () => exerciseDetailSheet(ex) : () => update(s => { s.gifSize = 'full' })} />}
       <div style={{ flex: 1, minWidth: 0, fontSize: (compact || dense) ? 'var(--fs-body)' : 'var(--fs-title3)', fontWeight: 600, letterSpacing: '-.02em', lineHeight: 1.2 }} className={exerciseNameClass(ex)}>{exerciseNameFor(ex)}</div>
