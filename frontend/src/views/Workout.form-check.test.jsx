@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
-// Form check on the exercise ⋯ menu: only for a squat, only where the iPhone app can run it, and
-// its "Use N reps" puts the counted reps into the open set without ticking it. The camera side
+// Form check on the exercise ⋯ menu: for an exercise some drill judges (a squat, a chin-up, a
+// side plank), only where the iPhone app can run it. Its "Use N reps" puts the counted reps into
+// the open set without ticking it; a hold's "Use N s" puts the seconds into the open timed set, and
+// is left out, with a line saying why, when the exercise's sets are not timed. The camera side
 // (lib/form-check-native.js) is a stand-in here; the rest is the real store and sheets.
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
@@ -23,7 +25,14 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true
 const clone = value => JSON.parse(JSON.stringify(value))
 const SQUAT = '3593'   // barbell squat
 const BENCH = '0289'   // dumbbell bench press
+const CHIN_UP = '1326'
+const SIDE_PLANK = '0715'
 const entry = id => ({ id, rid: 'main', target: { sets: 2, reps: 5, weight: 60 }, sets: [{ w: 60, r: 5, done: true }, { w: 60, r: 5, done: false }] })
+const timedEntry = id => ({ id, rid: 'main', target: { mode: 'time', sets: 3, sec: 30 }, sets: [{ sec: 30, w: 0, done: true }, { sec: 30, w: 0, done: false }, { sec: 30, w: 0, done: false }] })
+const HELD = {
+  count: 75, missed: 4, reps: [{ counted: true, reason: null, lost: false }], tiles: [], details: [[]],
+  cue: 'Out of line for 4 s: the hips dropped. Try pushing them up towards the ceiling.', cueId: 'missed', drill: 'side-plank', kind: 'hold',
+}
 
 let root, container, sheetRoot, sheetContainer
 
@@ -115,6 +124,44 @@ describe('Form check on the exercise menu', () => {
     h.available = false
     await renderWorkout([entry(SQUAT)])
     expect(menuItem(openMenu(), 'Form check')).toBeFalsy()
+  })
+
+  it('is there for a chin-up and a side plank too, a hold said as timed', async () => {
+    await renderWorkout([entry(CHIN_UP)])
+    expect(menuItem(openMenu(), 'Form check').textContent).toContain('Counts your reps with the camera')
+    act(() => root.unmount()); container.remove(); root = null
+    await renderWorkout([timedEntry(SIDE_PLANK)])
+    expect(menuItem(openMenu(), 'Form check').textContent).toContain('Times your hold with the camera')
+  })
+
+  it('puts the seconds held into the open timed set of a side plank, unticked', async () => {
+    h.result = HELD
+    await renderWorkout([timedEntry(SIDE_PLANK)])
+    const item = menuItem(openMenu(), 'Form check')
+    act(() => item.click())
+    const intro = renderTopSheet()
+    expect(intro.querySelector('[data-fc-drill] b').textContent).toBe('Side plank')
+    await act(async () => { button(intro, 'Start').click(); await Promise.resolve(); await Promise.resolve() })
+    expect(h.runs[0]).toMatchObject({ drill: 'side-plank' })
+    const result = renderTopSheet()
+    expect(result.querySelector('[data-fc-count]').textContent).toBe('1:15')
+    act(() => button(result, 'Use 75 s').click())
+    const sets = useStore.getState().S.active.entries[0].sets
+    expect(sets[1]).toMatchObject({ sec: 75, done: false })
+    expect(sets[0].sec).toBe(30)
+    expect(sets[2].sec).toBe(30)
+  })
+
+  it('has no "Use N s" for a side plank logged in reps, and says why', async () => {
+    h.result = HELD
+    await renderWorkout([entry(SIDE_PLANK)])
+    const item = menuItem(openMenu(), 'Form check')
+    act(() => item.click())
+    const intro = renderTopSheet()
+    await act(async () => { button(intro, 'Start').click(); await Promise.resolve(); await Promise.resolve() })
+    const result = renderTopSheet()
+    expect(button(result, 'Use 75 s')).toBeUndefined()
+    expect(result.querySelector('[data-fc-use-note]').textContent).toBe('This exercise’s sets are not timed, so the seconds are not put into a set.')
   })
 
   it('runs with the camera picked and puts the counted reps into the open set, unticked', async () => {

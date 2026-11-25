@@ -67,7 +67,7 @@ const sidePlank = {
   name: 'Side plank',
   kind: 'hold',
   views: ['front'],
-  setup: 'Phone low, 2 to 3 m away, facing your chest or your back, your whole body in the frame. Seconds count while your shoulders, hips and ankles stay in one line.',
+  setup: 'Phone low and turned sideways, 2 to 3 m away, facing your chest or your back, your whole body in the frame. Seconds count while your shoulders, hips and ankles stay in one line.',
   matches: ex => matchExercise(ex, { ids: IDS, name: /\bside plank\b/i, not: NOT_A_PLAIN_SIDE_PLANK, cats: new Set(['isometric']) }),
   standards: STANDARDS.map(({ id, label }) => ({ id, label })),
   defaultStandard: 'straight',

@@ -597,7 +597,13 @@ function ExerciseBlock({ entryIdx, compact, listed, dense, editing, onToggle, on
   const formCheckOn = useFormCheckAvailable()
   const drill = formCheckOn ? drillFor(ex) : null
   const formCheckOk = !!drill
-  const openFormCheck = () => formCheckSheet({ title: exerciseNameFor(ex), drill, onUse: editing ? null : useCountedReps })
+  // A hold (a plank) hands back seconds, which only a timed set has a place for; an exercise
+  // logged in reps gets the result without the button, and a line saying why.
+  const hold = drill?.kind === 'hold'
+  const openFormCheck = () => formCheckSheet({
+    title: exerciseNameFor(ex), drill, onUse: editing ? null : !hold ? useCountedReps : timed ? useHeldSeconds : null,
+    useNote: !editing && hold && !timed ? t('This exercise’s sets are not timed, so the seconds are not put into a set.') : '',
+  })
   // The same on the drawing's top corner, one tap away mid-workout (the tap must not pause the clip).
   const formCheckBtn = formCheckOk
     ? <button className="formcheck-btn" aria-label={t('Form check')} title={t('Form check')} onClick={e => { e.stopPropagation(); openFormCheck() }}><Icon name="camera" /></button>
@@ -609,6 +615,15 @@ function ExerciseBlock({ entryIdx, compact, listed, dense, editing, onToggle, on
     const k = sets.findIndex(x => !x.done && !isWarmupRow(x) && !isSideSet(x))
     if (k < 0) { useUI.getState().toast(t('No open set to put them in')); return }
     onField(k, 'r', n)
+  }
+  // "Use N s": the seconds held into the first open timed work set, as typing them would (sec,
+  // the plan set aside dropped), not ticked. A timed per-side hold's L and R rows are sets of
+  // their own here, so the first open side takes them.
+  const useHeldSeconds = n => {
+    const sets = useStore.getState().S.active?.entries?.[entryIdx]?.sets || []
+    const k = sets.findIndex(x => !x.done && !isWarmupRow(x))
+    if (k < 0) { useUI.getState().toast(t('No open set to put them in')); return }
+    onField(k, 'sec', n)
   }
   const setTitle = (s, i) => isWarmupRow(s) ? t('Warm-up') : sideTagOf(s) ? t('Set {0} ({1})', setNumOf(s, i), sideTagOf(s)) : t('Set {0}', setNumOf(s, i))
   // A timed per-side hold is one set over two rows; its video sits on the first of them.

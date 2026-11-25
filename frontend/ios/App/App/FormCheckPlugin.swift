@@ -16,17 +16,23 @@ import Vision
  *   FormCheck.addListener('pose', e => ...)          { t: ms, aspect: w / h, joints: { leftHip: [x, y, conf], ... } }
  *   FormCheck.addListener('closed', () => ...)       Done tapped, or stop()
  *   await FormCheck.start({ camera: 'back' | 'front', labels: { done, flip } })
- *   await FormCheck.setStatus({ text, reps, highlight }) the status line, the big count, and the
- *                                                    joints drawn large and green ([] none): the rep
- *                                                    under way meets the standard (the drill's choice)
+ *   await FormCheck.setStatus({ text, reps, highlight, quiet }) the status line, the big count, and
+ *                                                    the joints drawn large and green ([] none): the rep
+ *                                                    under way meets the standard (the drill's choice).
+ *                                                    A new count is read out to VoiceOver unless `quiet`
+ *                                                    (a hold's seconds, which change every second)
  *   await FormCheck.feedback({ kind, text })         'counted': a green flash of the screen edge and a
- *                                                    light tap; 'missed': a red flash and an error buzz,
- *                                                    `text` read out to VoiceOver. The count does not move.
+ *                                                    light tap; 'missed': a red flash and an error buzz.
+ *                                                    `text`, when given, is read out to VoiceOver (a
+ *                                                    no-rep's reason, a hold's "20 seconds"). The count
+ *                                                    does not move.
  *   await FormCheck.stop()
  *
  * Joints are in normalised image coordinates with y growing downward (Vision's origin is the
- * bottom left), only the ones Vision is reasonably sure of. The image is upright (portrait) and,
- * for the front camera, mirrored like the preview, so the skeleton lands on the picture.
+ * bottom left), only the ones Vision is reasonably sure of. The image is upright, in portrait or,
+ * with the phone turned on its side (a body lying along the floor fills more of it), in landscape,
+ * and for the front camera mirrored like the preview, so the skeleton lands on the picture. `aspect`
+ * is that upright image's width over its height, so it follows the turn.
  */
 @objc(FormCheckPlugin)
 public class FormCheckPlugin: CAPPlugin, CAPBridgedPlugin {
@@ -88,8 +94,9 @@ public class FormCheckPlugin: CAPPlugin, CAPBridgedPlugin {
         let text = call.getString("text") ?? ""
         let reps = call.getInt("reps") ?? 0
         let highlight = Set(call.getArray("highlight", String.self) ?? [])
+        let quiet = call.getBool("quiet") ?? false
         DispatchQueue.main.async {
-            self.shown?.setStatus(text, reps: reps, highlight: highlight)
+            self.shown?.setStatus(text, reps: reps, highlight: highlight, quiet: quiet)
             call.resolve()
         }
     }
@@ -131,6 +138,7 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
     private let edge = UIView()
     private let haptics = UINotificationFeedbackGenerator()
     private var lastSent: Double = 0       // video queue only
+    private var sessionOrientation: AVCaptureVideoOrientation = .portrait   // session queue only
     private var wasIdleDisabled = false
     private var closed = false
 
@@ -158,7 +166,8 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
 
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .portrait }
+    // Portrait, or on its side for a body lying along the floor (a plank fills a landscape frame).
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .allButUpsideDown }
     override var prefersStatusBarHidden: Bool { true }
 
     override func viewDidLoad() {
@@ -251,6 +260,37 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
         edge.frame = view.bounds
     }
 
+    /// The interface's orientation as the camera's, main thread only. The two enums name the
+    /// landscapes alike (by where the home side is), unlike UIDeviceOrientation.
+    private var interfaceVideoOrientation: AVCaptureVideoOrientation {
+        switch view.window?.windowScene?.interfaceOrientation ?? .portrait {
+        case .landscapeLeft: return .landscapeLeft
+        case .landscapeRight: return .landscapeRight
+        default: return .portrait
+        }
+    }
+
+    /// Turns the preview and the frames Vision reads with the interface, so both stay upright.
+    /// Main thread; the output's connection is turned on the session queue.
+    private func followOrientation() {
+        let o = interfaceVideoOrientation
+        if let c = preview.connection, c.isVideoOrientationSupported, c.videoOrientation != o { c.videoOrientation = o }
+        sessionQueue.async {
+            self.sessionOrientation = o
+            if let c = self.output.connection(with: .video), c.isVideoOrientationSupported, c.videoOrientation != o { c.videoOrientation = o }
+        }
+    }
+
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: nil) { [weak self] _ in self?.followOrientation() }
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        followOrientation()
+    }
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         // The phone is propped up out of reach for the whole set: it must not lock.
@@ -268,14 +308,14 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
         }
     }
 
-    func setStatus(_ text: String, reps count: Int, highlight: Set<String>) {
+    func setStatus(_ text: String, reps count: Int, highlight: Set<String>, quiet: Bool) {
         skeleton.highlight = highlight
         status.text = text
         status.isHidden = text.isEmpty
         let shownCount = String(count)
         if reps.text != shownCount {
             reps.text = shownCount
-            UIAccessibility.post(notification: .announcement, argument: shownCount)
+            if !quiet { UIAccessibility.post(notification: .announcement, argument: shownCount) }
         }
     }
 
@@ -288,7 +328,7 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
         }
         haptics.notificationOccurred(missed ? .error : .success)
         haptics.prepare()
-        if missed && !text.isEmpty { UIAccessibility.post(notification: .announcement, argument: text) }
+        if !text.isEmpty { UIAccessibility.post(notification: .announcement, argument: text) }
     }
 
     // Session queue only.
@@ -310,10 +350,11 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
               let input = try? AVCaptureDeviceInput(device: device),
               session.canAddInput(input) else { return }
         session.addInput(input)
-        // Upright frames, mirrored for the front camera like the preview: Vision then sees what
-        // the lifter sees, and its points land on the picture as they are.
+        // Upright frames (portrait or landscape, as the interface is), mirrored for the front
+        // camera like the preview: Vision then sees what the lifter sees, and its points land on
+        // the picture as they are.
         if let c = output.connection(with: .video) {
-            if c.isVideoOrientationSupported { c.videoOrientation = .portrait }
+            if c.isVideoOrientationSupported { c.videoOrientation = sessionOrientation }
             if c.isVideoMirroringSupported {
                 c.automaticallyAdjustsVideoMirroring = false
                 c.isVideoMirrored = front
@@ -322,7 +363,7 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
         let mirrored = front
         DispatchQueue.main.async {
             if let c = self.preview.connection {
-                if c.isVideoOrientationSupported { c.videoOrientation = .portrait }
+                if c.isVideoOrientationSupported { c.videoOrientation = self.interfaceVideoOrientation }
                 if c.isVideoMirroringSupported {
                     c.automaticallyAdjustsVideoMirroring = false
                     c.isVideoMirrored = mirrored

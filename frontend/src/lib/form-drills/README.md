@@ -30,7 +30,7 @@ export default {
   id: 'squat',                  // lower-case letters, digits, dashes; also the stored-standard key
   name: 'Squat',                // English key for t()
   kind: 'reps',                 // 'reps' | 'hold' (a hold reports seconds held in good position)
-  views: ['side', 'front', 'diagonal'], // the camera angles it can judge, best first
+  views: ['side', 'front', 'diagonal'], // the camera angles it can judge, best first (the intro's "Works from")
   setup: 'Phone at knee height and level, ...', // English key for t(): the intro's how-to-stand line
   matches(ex),                  // catalogue exercise { id, n, cat } -> boolean. An id allow-list
                                 // plus a guarded name test (kit.matchExercise). false for null.
@@ -64,7 +64,7 @@ and returns, every frame:
 | `phase` | string | `'waiting'`, `'standing'`, `'descending'`, `'bottom'`, `'ascending'` (kit phase machine), or the drill's own |
 | `inFrame` | boolean | false when the frame cannot be judged (a framing problem); the glue then never overrides `hint` |
 | `hint` | string | the translated status line ('' for none): framing, view, camera, "stand tall", "ready" |
-| `justCounted` | boolean | true on the one frame a rep is counted: the glue says `count` aloud, flashes green (`hold`: set it when a spoken milestone is due) |
+| `justCounted` | boolean | true on the one frame a rep is counted: the glue says `count` aloud, flashes green (`hold`: set it when a spoken milestone is due; the glue says "{count} seconds", and VoiceOver hears only those) |
 | `justMissed` | boolean | true on the one frame a rep ends without counting |
 | `reason` | string or null | with `justMissed`: a key of `misses` |
 | `reached` | boolean | the rep under way already meets the standard |

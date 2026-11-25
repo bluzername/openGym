@@ -2,6 +2,9 @@
 // the camera full screen with the skeleton over it and sends the pose about 15 times a second;
 // this feeds the poses to the drill's tracker, puts the tracker's hint on the native status line,
 // says each rep's number aloud, and hands back the tracker's result once the view closes.
+// A hold (kind 'hold', a plank) counts seconds: the number on screen moves every second but only
+// the drill's milestones (every 10 seconds held) are said, as "20 seconds", and VoiceOver hears
+// those and nothing in between.
 // A rep that did not meet the lifter's standard is said too (the drill's `misses`), flashed red
 // with a buzz, and its line stays on the status line for MISS_SHOW_MS; the count does not move.
 // Nothing here knows a movement. Nothing is filmed or kept: the frames never leave the native
@@ -10,7 +13,7 @@
 // iPhone only. Anywhere else (the web, Android, a build without the plugin, the simulator, which
 // has no camera) formCheckAvailable() resolves false and nothing offers it.
 import { MOBILE } from './mobile.js'
-import { t } from './i18n-core.js'
+import { t, tn } from './i18n-core.js'
 import { speak } from './speech.js'
 import { drillById } from './form-drills/index.js'
 
@@ -62,6 +65,7 @@ export async function runFormCheck({ drill: drillId, camera = 'back', onUpdate, 
   if (!p) throw new Error('unavailable')
   const { FormCheck } = p
   const tracker = drill.create({ standard: drill.standards.some(s => s.id === standard) ? standard : drill.defaultStandard })
+  const hold = drill.kind === 'hold'
   let shown = null
   let missUntil = -1, missText = ''
   const subs = []
@@ -79,14 +83,16 @@ export async function runFormCheck({ drill: drillId, camera = 'back', onUpdate, 
     const key = text + '|' + now.count + '|' + highlight.join(',')
     if (key !== shown) {
       shown = key
-      FormCheck.setStatus({ text, reps: now.count, highlight }).catch(() => {})
+      // `quiet`: the native view does not read every second of a hold out to VoiceOver.
+      FormCheck.setStatus({ text, reps: now.count, highlight, quiet: hold }).catch(() => {})
     }
     // A number cuts off whatever is still being said, so it is never late; a no-rep is queued
     // behind it instead, so it never talks over one. feedback() is the flash and the buzz; a
     // build without it just rejects.
     if (now.justCounted) {
-      speak(String(now.count), { ...voice, onSilent: true, queue: false }).catch?.(() => {})
-      FormCheck.feedback?.({ kind: 'counted' })?.catch?.(() => {})
+      const said = hold ? tn('{0} second', '{0} seconds', now.count) : String(now.count)
+      speak(said, { ...voice, onSilent: true, queue: false }).catch?.(() => {})
+      FormCheck.feedback?.(hold ? { kind: 'counted', text: said } : { kind: 'counted' })?.catch?.(() => {})
     }
     if (now.justMissed) {
       speak(missedSay(drill, now.reason), { ...voice, onSilent: true, queue: true }).catch?.(() => {})

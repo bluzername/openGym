@@ -196,7 +196,7 @@ const plank = {
   name: 'Plank',
   kind: 'hold',
   views: ['side'],
-  setup: 'Phone low, side-on to you, 2 to 3 m away, your whole body in the frame. Seconds count while your shoulders, hips and ankles stay in one line.',
+  setup: 'Phone low and turned sideways, side-on to you, 2 to 3 m away, your whole body in the frame. Seconds count while your shoulders, hips and ankles stay in one line.',
   matches: ex => matchPlank(ex),
   standards: STANDARDS.map(({ id, label }) => ({ id, label })),
   defaultStandard: 'straight',

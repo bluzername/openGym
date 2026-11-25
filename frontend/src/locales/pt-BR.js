@@ -4545,7 +4545,6 @@ export const PT_BR_OVERRIDES = {
   "The hips sank lower as the hold went on.": "O quadril foi baixando ao longo da sustentação.",
   "The line held steady through the hold.": "A linha se manteve estável durante a sustentação.",
   "Plank": "Prancha",
-  "Phone low, side-on to you, 2 to 3 m away, your whole body in the frame. Seconds count while your shoulders, hips and ankles stay in one line.": "Celular baixo, de lado para você, a 2 a 3 m, o corpo inteiro no enquadramento. Os segundos contam enquanto ombros, quadril e tornozelos ficam em uma linha.",
   "Straight line": "Linha reta",
   "Strict line": "Linha rigorosa",
   "Hips sagging. Time not counted.": "Quadril caído. Tempo não contado.",
@@ -4640,7 +4639,6 @@ export const PT_BR_OVERRIDES = {
   "Not counted: hands above mid-shin": "Não contou: mãos acima da metade da canela",
   "Out of line for {0} s: the hips dropped. Try pushing them up towards the ceiling.": "Fora da linha por {0} s: o quadril desceu. Tente empurrá-lo em direção ao teto.",
   "Side plank": "Prancha lateral",
-  "Phone low, 2 to 3 m away, facing your chest or your back, your whole body in the frame. Seconds count while your shoulders, hips and ankles stay in one line.": "Celular baixo, a 2 a 3 m, virado para o seu peito ou suas costas, o corpo inteiro no enquadramento. Os segundos contam enquanto ombros, quadril e tornozelos ficam em uma linha.",
   "Reps that did not count: {0}. The front thigh did not get to parallel.": "Repetições que não contaram: {0}. A coxa da frente não chegou ao paralelo.",
   "Most reps stopped above parallel. Try lowering the back knee closer to the floor.": "A maioria das repetições parou acima do paralelo. Tente baixar o joelho de trás mais perto do chão.",
   "Filmed from the side: depth, tempo, front knee angle and torso lean.": "Filmado de lado: profundidade, ritmo, ângulo do joelho da frente e inclinação do tronco.",
@@ -4658,6 +4656,20 @@ export const PT_BR_OVERRIDES = {
   "Filmed from the side: lockout, tempo and elbow drift.": "Filmado de lado: extensão total, ritmo e desvio dos cotovelos.",
   "Triceps pushdown": "Tríceps na polia",
   "Phone side-on at chest height, 2 to 3 m away, your whole body in the frame.": "Celular de lado na altura do peito, a 2 a 3 m, o corpo inteiro no enquadramento.",
+  // Form check holds: seconds held, stretches, Use N s, the angles a drill works from, the phone on its side (components/FormCheckSheet.jsx)
+  "Every stretch": "Cada trecho",
+  "Stretch {0}": "Trecho {0}",
+  "Every 10 seconds held is said aloud. Nothing is filmed or kept: the camera is only read on this phone.": "A cada 10 segundos de sustentação, o valor é dito em voz alta. Nada é filmado nem guardado: a câmera só é lida neste celular.",
+  "{0} s out of line": "{0} s fora da linha",
+  "Use {0} s": "Usar {0} s",
+  "Held in position": "Mantido na posição",
+  "Works from: {0}": "Funciona filmando de: {0}",
+  "side": "lado",
+  "front": "frente",
+  "at an angle": "na diagonal",
+  "This exercise’s sets are not timed, so the seconds are not put into a set.": "As séries deste exercício não são cronometradas, então os segundos não entram em uma série.",
+  "Phone low and turned sideways, side-on to you, 2 to 3 m away, your whole body in the frame. Seconds count while your shoulders, hips and ankles stay in one line.": "Celular baixo e virado na horizontal, de lado para você, a 2 a 3 m, o corpo inteiro no enquadramento. Os segundos contam enquanto ombros, quadril e tornozelos ficam em uma linha.",
+  "Phone low and turned sideways, 2 to 3 m away, facing your chest or your back, your whole body in the frame. Seconds count while your shoulders, hips and ankles stay in one line.": "Celular baixo e virado na horizontal, a 2 a 3 m, virado para o seu peito ou suas costas, o corpo inteiro no enquadramento. Os segundos contam enquanto ombros, quadril e tornozelos ficam em uma linha.",
 }
 
 export default { ...pt, ...PT_BR_OVERRIDES }

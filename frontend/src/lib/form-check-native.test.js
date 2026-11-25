@@ -66,7 +66,7 @@ describe('runFormCheck', () => {
     expect(h.sayOpts[0]).toMatchObject({ rate: 1.2, onSilent: true, queue: false })
     const statuses = h.calls.filter(c => c[0] === 'setStatus')
     expect(statuses.length).toBeLessThan(20)
-    expect(statuses.at(-1)[1]).toEqual({ text: '', reps: 3, highlight: [] })
+    expect(statuses.at(-1)[1]).toEqual({ text: '', reps: 3, highlight: [], quiet: false })
     expect(h.calls.filter(c => c[0] === 'feedback').map(c => c[1].kind)).toEqual(['counted', 'counted', 'counted'])
     expect(updates).toHaveLength(frames.length)
     h.listeners.closed({})
@@ -80,7 +80,7 @@ describe('runFormCheck', () => {
     runFormCheck({ drill: 'squat' })
     await flush(); await flush()
     h.listeners.pose({ t: 0, joints: {} })
-    expect(h.calls.find(c => c[0] === 'setStatus')[1]).toEqual({ text: 'Step into the frame', reps: 0, highlight: [] })
+    expect(h.calls.find(c => c[0] === 'setStatus')[1]).toEqual({ text: 'Step into the frame', reps: 0, highlight: [], quiet: false })
   })
 
   it('says a no-rep at once, queued behind any number, flashes it and shows why for about 2 s', async () => {
@@ -103,7 +103,7 @@ describe('runFormCheck', () => {
     const fb = h.calls.filter(c => c[0] === 'feedback').map(c => c[1])
     expect(fb).toEqual([{ kind: 'counted' }, { kind: 'missed', text: missedHint(SQUAT, 'shallow') }, { kind: 'counted' }])
     // The reason goes up with the miss, the count stays, and the line clears after MISS_SHOW_MS.
-    expect(lineAt[missedAt]).toEqual({ text: missedHint(SQUAT, 'shallow'), reps: 1, highlight: [] })
+    expect(lineAt[missedAt]).toEqual({ text: missedHint(SQUAT, 'shallow'), reps: 1, highlight: [], quiet: false })
     const cleared = Object.keys(lineAt).map(Number).find(t => t > missedAt && lineAt[t].text !== missedHint(SQUAT, 'shallow'))
     expect(cleared - missedAt).toBeGreaterThanOrEqual(MISS_SHOW_MS)
     expect(cleared - missedAt).toBeLessThan(MISS_SHOW_MS + 200)
@@ -122,6 +122,30 @@ describe('runFormCheck', () => {
     expect(reached.filter((v, i) => v !== reached[i - 1])).toEqual([false, true, false, true, false])
     h.listeners.closed({})
     expect((await run).standard).toBe('any')
+  })
+
+  it('times a hold quietly: the seconds on screen, only the milestones said, as seconds, and read to VoiceOver', async () => {
+    // The plank's own tracker is stood in for: one second held per frame, a milestone every 10.
+    const plank = drillById('plank')
+    const create = vi.spyOn(plank, 'create').mockImplementation(() => {
+      let n = 0
+      return {
+        push: () => { n++; return { count: n, inFrame: true, hint: '', justCounted: n % 10 === 0, justMissed: false, reason: null, reached: true, highlight: [] } },
+        result: () => ({ count: n, missed: 0, reps: [], tiles: [], cue: '', cueId: 'steady', details: [] }),
+      }
+    })
+    try {
+      const run = runFormCheck({ drill: 'plank' })
+      await flush(); await flush()
+      for (let i = 0; i < 25; i++) h.listeners.pose({ t: i * 1000, aspect: 0.75, joints: {} })
+      expect(h.said).toEqual(['10 seconds', '20 seconds'])
+      const statuses = h.calls.filter(c => c[0] === 'setStatus').map(c => c[1])
+      expect(statuses).toHaveLength(25)
+      expect(statuses.every(x => x.quiet === true)).toBe(true)
+      expect(h.calls.filter(c => c[0] === 'feedback').map(c => c[1])).toEqual([{ kind: 'counted', text: '10 seconds' }, { kind: 'counted', text: '20 seconds' }])
+      h.listeners.closed({})
+      expect(await run).toMatchObject({ count: 25, drill: 'plank', kind: 'hold' })
+    } finally { create.mockRestore() }
   })
 
   it('rejects when the camera view cannot open', async () => {
