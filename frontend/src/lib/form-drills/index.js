@@ -31,7 +31,10 @@ const BY_ID = new Map(DRILLS.map(d => [d.id, d]))
 export const drillById = id => BY_ID.get(id) || null
 
 /** The drill that judges this catalogue exercise ({ id, n, cat }), or null when none does. */
-export const drillFor = ex => DRILLS.find(d => d.matches(ex)) || null
+// Exercises a drill's name test lets in but its signal cannot judge (a lower back "curl", a bird dog
+// "plank", fly and raise variants on rings, straps or a landmine, lunges with a second movement).
+const NOT_JUDGED = new Set(['1352', '1148', '9002', '4923', '1090', '1130', '3237', '4161', '3581'])
+export const drillFor = ex => (ex && NOT_JUDGED.has(String(ex.id)) ? null : DRILLS.find(d => d.matches(ex)) || null)
 
 /** The drill's standard: `standard` when it is one of the drill's, else its default; null for no drill. */
 export function standardFor(drillOrId, standard) {

@@ -76,6 +76,12 @@ describe('the registry', () => {
     expect(DRILLS.filter(d => d.matches(EXIDX[id])).length).toBe(drill ? 1 : 0)
   })
 
+  // Let in by a drill's name test, but not what its signal judges: the registry turns them away.
+  it.each(['1352', '1148', '9002', '4923', '1090', '1130', '3237', '4161', '3581'])('gives exercise %s no drill', id => {
+    expect(EXIDX[id]).toBeTruthy()
+    expect(drillFor(EXIDX[id])).toBe(null)
+  })
+
   it('keeps a standard that is the drill’s and falls back to its default otherwise', () => {
     expect(standardFor('squat', 'below')).toBe('below')
     expect(standardFor(drillById('squat'), 'knee-deep')).toBe('parallel')
