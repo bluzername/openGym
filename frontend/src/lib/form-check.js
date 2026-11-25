@@ -29,6 +29,22 @@ export const FACING_SPREAD = 0.5       // hips this many thigh lengths apart: fa
 export const FAR_HEIGHT = 0.35         // shoulder to ankle under this share of the frame: too far
 const SIDE_SMOOTH = 0.2
 
+// The squats Form check is offered for: a few by id, and any two-legged squat by its name. One leg
+// at a time (split, pistol, skater), jumps, holds and combinations (squat to press, squat row) are
+// left out: the rep is not a single bend and stand of both knees.
+export const SQUAT_IDS = new Set(['3593', '2966', '0043'])
+const NOT_A_PLAIN_SQUAT = /split|single leg|one leg|pistol|skater|cossack|curtsey|side squat|jump|hold|row|curl|press|punch|chin up|sissy|wall|lunge|calf|form check|knees|kneeling|deadlift|pallof|twist|chop/i
+const SQUAT_CATS = new Set(['strength', 'calisthenics'])
+
+/** Whether an exercise ({ id, n, cat }) is a plain squat Form check can count. */
+export function isSquatPattern(ex) {
+  if (!ex || typeof ex !== 'object') return false
+  if (SQUAT_IDS.has(ex.id)) return true
+  const name = String(ex.n || '')
+  if (!/\bsquat/i.test(name) || NOT_A_PLAIN_SQUAT.test(name)) return false
+  return !ex.cat || SQUAT_CATS.has(ex.cat)
+}
+
 const CHAIN = ['Hip', 'Knee', 'Ankle']
 
 const seen = (joints, name) => {

@@ -27,6 +27,8 @@ import Media from '../components/Media.jsx'
 import WorkoutScrollAnchor from '../components/WorkoutScrollAnchor.jsx'
 import WorkoutChips from '../components/WorkoutChips.jsx'
 import { filmSetSheet, SetVideoBadge, ActiveSetVideo } from '../components/SetVideo.jsx'
+import { formCheckSheet, useFormCheckAvailable } from '../components/FormCheckSheet.jsx'
+import { isSquatPattern } from '../lib/form-check.js'
 import { setVideoOf, filmTarget } from '../lib/set-videos.js'
 import { fmtClip } from '../lib/media-refs.js'
 import { supersetMeta } from '../lib/superset-meta.js'
@@ -590,6 +592,16 @@ function ExerciseBlock({ entryIdx, compact, listed, dense, editing, onToggle, on
   // Settings → Modules → Effort off: no cardio chip either (the set menu keeps its row).
   const effortOn = isOn(S, 'effort')
   const filmAt = videosOn ? filmTarget(entry) : -1
+  // Form check (components/FormCheckSheet.jsx): squats only, on an iPhone that can run it.
+  const formCheckOk = useFormCheckAvailable() && isSquatPattern(ex)
+  // "Use N reps": the reps of the set in progress, the first open work set, not ticked. A set done
+  // one side at a time has no single reps field, so it is passed over.
+  const useCountedReps = n => {
+    const sets = useStore.getState().S.active?.entries?.[entryIdx]?.sets || []
+    const k = sets.findIndex(x => !x.done && !isWarmupRow(x) && !isSideSet(x))
+    if (k < 0) { useUI.getState().toast(t('No open set to put them in')); return }
+    onField(k, 'r', n)
+  }
   const setTitle = (s, i) => isWarmupRow(s) ? t('Warm-up') : sideTagOf(s) ? t('Set {0} ({1})', setNumOf(s, i), sideTagOf(s)) : t('Set {0}', setNumOf(s, i))
   // A timed per-side hold is one set over two rows; its video sits on the first of them.
   const filmSet = i => {
@@ -610,6 +622,7 @@ function ExerciseBlock({ entryIdx, compact, listed, dense, editing, onToggle, on
         onKeepWarmups && { icon: 'sunrise', label: t('Keep these warm-ups'), sub: t('Saved in the routine, scaled to your work weight'), onClick: onKeepWarmups },
         onRest && { icon: 'timer', label: t('Rest timer'), sub: restSub, onClick: onRest },
         { icon: 'history', label: t('History'), sub: last ? t('Last time') + ' ' + fmtDate(last.d) : undefined, onClick: () => exerciseHistorySheet(entry.id) },
+        formCheckOk && { icon: 'camera', label: t('Form check'), sub: t('Counts your squats with the camera'), onClick: () => formCheckSheet({ title: exerciseNameFor(ex), onUse: editing ? null : useCountedReps }) },
         // The Coach on this exercise, for the rest of this workout (components/WorkoutCoachSheet.jsx).
         onAskCoach && { icon: 'sparkles', label: t('Ask the Coach'), sub: t('It hurts, it’s taken, no time, feeling great'), onClick: onAskCoach },
       ] },

@@ -1,0 +1,116 @@
+// @vitest-environment happy-dom
+// Form check on the exercise ⋯ menu: only for a squat, only where the iPhone app can run it, and
+// its "Use N reps" puts the counted reps into the open set without ticking it. The camera side
+// (lib/form-check-native.js) is a stand-in here; the rest is the real store and sheets.
+import React, { act } from 'react'
+import { createRoot } from 'react-dom/client'
+import { MemoryRouter } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+const h = vi.hoisted(() => ({ available: true, result: null, runs: [] }))
+vi.mock('../lib/sound.js', () => ({ beep: vi.fn(), chime: vi.fn(), vibrate: vi.fn(), alertBuzz: vi.fn(), unlock: vi.fn() }))
+vi.mock('../lib/api.js', () => ({ api: vi.fn(() => Promise.resolve({})), appBase: () => '/' }))
+vi.mock('../lib/form-check-native.js', () => ({
+  formCheckAvailable: () => Promise.resolve(h.available),
+  runSquatCheck: opts => { h.runs.push(opts); return Promise.resolve(h.result) },
+}))
+
+const { default: Workout } = await import('./Workout.jsx')
+const { DEF, useStore } = await import('../store/useStore.js')
+const { useUI } = await import('../store/useUI.js')
+
+globalThis.IS_REACT_ACT_ENVIRONMENT = true
+const clone = value => JSON.parse(JSON.stringify(value))
+const SQUAT = '3593'   // barbell squat
+const BENCH = '0289'   // dumbbell bench press
+const entry = id => ({ id, rid: 'main', target: { sets: 2, reps: 5, weight: 60 }, sets: [{ w: 60, r: 5, done: true }, { w: 60, r: 5, done: false }] })
+
+let root, container, sheetRoot, sheetContainer
+
+async function renderWorkout(entries) {
+  const S = clone(DEF)
+  S.routines = [{ id: 'main', name: 'Main', ex: entries.map(e => ({ id: e.id, sets: 2, reps: 5, weight: 60 })) }]
+  S.active = { id: 'fc', d: '2026-11-25', start: Date.now(), routineIds: ['main'], routineId: 'main', name: 'Main', bw: null, cur: 0, entries }
+  useStore.setState({ S, user: null })
+  container = document.createElement('div')
+  document.body.appendChild(container)
+  root = createRoot(container)
+  act(() => root.render(<MemoryRouter><Workout /></MemoryRouter>))
+  // useFormCheckAvailable answers after a promise.
+  await act(async () => { await Promise.resolve() })
+}
+
+function renderTopSheet() {
+  if (sheetRoot) act(() => sheetRoot.unmount())
+  if (sheetContainer) sheetContainer.remove()
+  const sheet = useUI.getState().sheets.at(-1)
+  expect(sheet).toBeTruthy()
+  sheetContainer = document.createElement('div')
+  document.body.appendChild(sheetContainer)
+  sheetRoot = createRoot(sheetContainer)
+  act(() => sheetRoot.render(sheet.render(() => useUI.getState().closeSheet(sheet.id))))
+  return sheetContainer
+}
+const openMenu = () => {
+  const more = container.querySelector('button[aria-label="More"]')
+  expect(more).toBeTruthy()
+  act(() => more.click())
+  return renderTopSheet()
+}
+const menuItem = (menu, label) => [...menu.querySelectorAll('.menu-item')].find(it => it.querySelector('.tt')?.textContent === label)
+const button = (c, text) => [...c.querySelectorAll('button')].find(b => b.textContent.trim() === text)
+
+beforeEach(() => {
+  localStorage.clear()
+  useUI.setState({ sheets: [], toastMsg: '', timer: null, work: null })
+  h.available = true; h.runs = []
+  h.result = {
+    reps: Array.from({ length: 7 }, () => ({ depth: 'below', minKnee: 55, downSec: 2, upSec: 1, lean: 40, lost: false })),
+    summary: { count: 7, depthBelow: 7, depthParallel: 0, depthAbove: 0, avgDown: 2, avgUp: 1, maxLean: 40, consistency: 2 },
+    cue: 'Depth and tempo held steady across the set.', cueId: 'steady',
+  }
+  root = null; container = null; sheetRoot = null; sheetContainer = null
+})
+
+afterEach(() => {
+  if (sheetRoot) act(() => sheetRoot.unmount())
+  if (sheetContainer) sheetContainer.remove()
+  if (root) act(() => root.unmount())
+  if (container) container.remove()
+  useUI.getState().stopRest()
+})
+
+describe('Form check on the exercise menu', () => {
+  it('is there for a squat on an iPhone that can run it', async () => {
+    await renderWorkout([entry(SQUAT)])
+    expect(menuItem(openMenu(), 'Form check')).toBeTruthy()
+  })
+
+  it('is not there for a bench press', async () => {
+    await renderWorkout([entry(BENCH)])
+    expect(menuItem(openMenu(), 'Form check')).toBeFalsy()
+  })
+
+  it('is not there where it cannot run (the web, Android, the simulator)', async () => {
+    h.available = false
+    await renderWorkout([entry(SQUAT)])
+    expect(menuItem(openMenu(), 'Form check')).toBeFalsy()
+  })
+
+  it('runs with the camera picked and puts the counted reps into the open set, unticked', async () => {
+    await renderWorkout([entry(SQUAT)])
+    // Opened outside act(): the menu renders through nested act() calls an outer one would hold back.
+    const item = menuItem(openMenu(), 'Form check')
+    act(() => item.click())
+    const intro = renderTopSheet()
+    act(() => button(intro, 'Front camera').click())
+    await act(async () => { button(intro, 'Start').click(); await Promise.resolve(); await Promise.resolve() })
+    expect(h.runs[0].camera).toBe('front')
+    const result = renderTopSheet()
+    expect(result.querySelector('h3').textContent).toBe('7 reps')
+    act(() => button(result, 'Use 7 reps').click())
+    const sets = useStore.getState().S.active.entries[0].sets
+    expect(sets[1]).toMatchObject({ r: 7, done: false })
+    expect(sets[0].r).toBe(5)
+  })
+})

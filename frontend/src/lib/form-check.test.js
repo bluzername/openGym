@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { createSquatTracker, framing, kneeAngle, pickSide, CUE, FAST_DOWN_SEC } from './form-check.js'
+import { createSquatTracker, framing, kneeAngle, pickSide, isSquatPattern, CUE, FAST_DOWN_SEC } from './form-check.js'
+import { EXIDX } from './exercises.js'
 
 // A lifter filmed side-on, drawn from one number: the knee angle (180 is straight). The shin tips
 // forward a quarter of the bend and the torso leans with it, so the thigh is level at about 60°.
@@ -246,5 +247,28 @@ describe('framing', () => {
   it('says the lifter is too far away', () => {
     const j = Object.fromEntries(Object.entries(pose(176)).map(([k, [x, y, c]]) => [k, [0.5 + (x - 0.5) / 3, 0.5 + (y - 0.5) / 3, c]]))
     expect(framing({ joints: j })).toBe('far')
+  })
+})
+
+describe('isSquatPattern', () => {
+  it('takes the squats of the allow-list', () => {
+    expect(isSquatPattern(EXIDX['3593'])).toBe(true)   // barbell squat
+    expect(isSquatPattern(EXIDX['2966'])).toBe(true)   // dumbbell front squat
+    expect(isSquatPattern(EXIDX['0043'])).toBe(true)   // barbell full squat
+  })
+
+  it('leaves the rest of the plan out, even on the allow-list user plan', () => {
+    expect(isSquatPattern(EXIDX['9698'])).toBe(false)  // dumbbell chest supported row
+    expect(isSquatPattern(EXIDX['0289'])).toBe(false)  // dumbbell bench press
+  })
+
+  it('takes a two-legged squat by its name, a custom one too', () => {
+    expect(isSquatPattern(EXIDX['1760'])).toBe(true)   // dumbbell goblet squat
+    expect(isSquatPattern({ id: 'c1', n: 'Safety bar squat', cat: 'strength' })).toBe(true)
+  })
+
+  it('leaves out squats a side-on knee angle cannot read: one leg, jumps, holds, combos', () => {
+    for (const id of ['2290', '0053', '4362', '1003', '4754', '3747', '1540']) expect(isSquatPattern(EXIDX[id])).toBe(false)
+    expect(isSquatPattern(null)).toBe(false)
   })
 })
