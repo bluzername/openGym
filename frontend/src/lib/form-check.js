@@ -9,7 +9,13 @@
 // The knee angle (hip-knee-ankle, 180 straight) drives a small state machine:
 //   waiting -> standing -> descending -> bottom -> ascending -> standing (a rep)
 // It waits until the lifter has stood up once, so setting up under the bar is not a rep, and a
-// rep counts only when the knee bent past MIN_REP_ANGLE on the way, so a wobble at the top is not.
+// descent is a rep only when the knee bent past MIN_REP_ANGLE on the way, so a wobble at the top is
+// not. A rep then counts when it met the lifter's standard (DRILLS: parallel, below or any depth);
+// one that did not is kept as a no-rep, flagged, and left out of the count.
+//
+// The drill (DRILLS) brings what is particular to a movement: the angle the reps are read from and
+// its thresholds, how deep a frame went, the names of depth and the standards. The state machine
+// and the result are shared, so a second drill is a new entry with its own functions.
 import { t } from './i18n-core.js'
 
 export const MIN_CONF = 0.25
@@ -118,11 +124,18 @@ export function framing(frame) {
   return null
 }
 
+// A squat's depth from how far the hip sat below the knee (hipDrop, thigh lengths).
+const squatDepth = drop => (drop == null ? null : drop > PARALLEL_BAND ? 'below' : drop < -PARALLEL_BAND ? 'above' : 'parallel')
+
 const round1 = n => Math.round(n * 10) / 10
 const mean = xs => xs.reduce((a, b) => a + b, 0) / xs.length
 
 /** The one sentence a result ends with, by its id. Functions, so they read the language at call time. */
 export const CUE = {
+  // A no-rep: said first, whatever else the set showed. `n` no-reps under `standard`.
+  missed: (n, standard) => (standard === 'below'
+    ? t('Reps that did not count: {0}. The hip did not get below the knee.', n)
+    : t('Reps that did not count: {0}. The hip stayed above the knee.', n)),
   none: () => t('No reps were counted. Stand side-on with your whole body in the frame and try again.'),
   framing: () => t('The camera lost you during most reps. Stand side-on with your whole body in the frame.'),
   deeper: () => t('Most reps stopped above parallel. Try sitting a little deeper.'),
@@ -131,7 +144,42 @@ export const CUE = {
   steady: () => t('Depth and tempo held steady across the set.'),
 }
 
-function pickCue(reps) {
+/**
+ * The drills Form check can count. Each: `standards` (the lowest a rep may stop and still count,
+ * the lifter's choice) and `defaultStandard`; `angle(joints, side, aspect)` the angle the reps are
+ * read from (180 straight, smaller bent) with `stand`, `descent` and `minRep` thresholds;
+ * `reach(joints, side, aspect)` how deep a frame went (bigger deeper), `depth(reach)` its name, and
+ * `meets(depth, standard)`; `lean` an optional extra measure; `cues` the result's sentences.
+ */
+export const DRILLS = {
+  squat: {
+    id: 'squat',
+    standards: ['parallel', 'below', 'any'],
+    defaultStandard: 'parallel',
+    angle: (joints, side, aspect) => kneeAngle(joints, side, aspect),
+    stand: STAND_ANGLE,
+    descent: DESCENT_ANGLE,
+    minRep: MIN_REP_ANGLE,
+    reach: (joints, side, aspect) => hipDrop(joints, side, aspect),
+    depth: squatDepth,
+    // parallel: the hip came to knee height, within PARALLEL_BAND; below: clearly under it; any:
+    // every real descent. A depth never seen (no hip or knee at the bottom) is given the rep.
+    meets: (depth, standard) => standard === 'any' || depth == null || (standard === 'below' ? depth === 'below' : depth !== 'above'),
+    lean: (joints, side, aspect) => torsoLean(joints, side, aspect),
+    cues: CUE,
+  },
+}
+
+/** The drill's standard: `standard` when it is one of the drill's, else its default. */
+export function standardFor(drillId, standard) {
+  const drill = DRILLS[drillId]
+  if (!drill) return null
+  return drill.standards.includes(standard) ? standard : drill.defaultStandard
+}
+
+// `reps`: the counted ones; no-reps come first.
+function pickCue(reps, missed) {
+  if (missed) return 'missed'
   const n = reps.length
   if (!n) return 'none'
   if (reps.filter(r => r.lost).length * 2 > n) return 'framing'
@@ -145,13 +193,16 @@ function pickCue(reps) {
   return 'steady'
 }
 
-function summarise(reps) {
+// Every figure but `missed` is over the counted reps only: a no-rep's depth and tempo are not the
+// set's. depthShare() reads all of them, no-reps included, for the depth they reached.
+function summarise(reps, missed) {
   const n = reps.length
   const depthOf = d => reps.filter(r => r.depth === d).length
   const bottoms = reps.map(r => r.minKnee)
   const leans = reps.map(r => r.lean).filter(x => x != null)
   return {
     count: n,
+    missed,
     depthBelow: depthOf('below'),
     depthParallel: depthOf('parallel'),
     depthAbove: depthOf('above'),
@@ -164,33 +215,58 @@ function summarise(reps) {
 }
 
 /**
- * A live tracker: push(frame) -> { reps, phase, inFrame, justCounted } per frame, result() ->
- * { reps: [{ depth, minKnee, downSec, upSec, lean, lost }], summary, cue, cueId } at any time.
+ * Of every rep, no-reps included, how many reached the depth a result talks about: below parallel
+ * under the 'below' standard, parallel or deeper otherwise. { hit, of, depth: 'below' | 'parallel' }.
  */
-export function createSquatTracker() {
+export function depthShare(reps, standard) {
+  const list = Array.isArray(reps) ? reps : []
+  const depth = standard === 'below' ? 'below' : 'parallel'
+  const hit = list.filter(r => r.depth === 'below' || (depth === 'parallel' && r.depth === 'parallel')).length
+  return { hit, of: list.length, depth }
+}
+
+/**
+ * A live tracker for one drill (DRILLS) and the lifter's standard, by default the drill's own.
+ * push(frame) -> { reps, phase, inFrame, justCounted, justMissed, reason, reached } per frame:
+ * `reps` is the counted ones, `justMissed` (with `reason`, 'shallow') is set on the frame a
+ * no-rep ends, the way `justCounted` is on a counted one, and `reached` says the rep under way has
+ * already met the standard. result() -> { reps: [{ depth, minKnee, downSec, upSec, lean, lost,
+ * counted, reason }], summary, cue, cueId, drill, standard } at any time.
+ *
+ * A rep the camera lost for a moment (shorter than LOST_RESET_MS) counts whatever depth was seen,
+ * as before the standards: its bottom may have been in the gap. It stays flagged `lost`. One lost
+ * for longer is dropped, neither counted nor missed.
+ */
+export function createTracker({ drill: drillId = 'squat', standard } = {}) {
+  const drill = DRILLS[drillId]
+  if (!drill) throw new Error('unknown drill: ' + drillId)
+  const std = standardFor(drillId, standard)
   const reps = []
   const conf = { left: 0, right: 0 }
   let phase = 'waiting'
-  let angle = null           // smoothed knee angle
+  let angle = null           // smoothed angle
   let lastSeenT = null
   let topRef = 0             // the standing angle, the highest while standing
   let topT = 0               // the last moment still at the top, where a descent starts
   let rep = null             // the rep under way
-  let closing = null         // a counted rep whose way up is still being timed
+  let closing = null         // a finished rep whose way up is still being timed
 
   const closeUp = at => { if (closing) { closing.upSec = round1(Math.max(0, at - closing.bottomT) / 1000); closing = null } }
+  const reachedNow = () => !!rep && rep.rawMin < drill.minRep && drill.meets(drill.depth(rep.drop), std)
 
   function track(joints, side, aspect, raw, t) {
     if (raw < rep.rawMin) rep.rawMin = raw
-    const d = hipDrop(joints, side, aspect)
+    const d = drill.reach(joints, side, aspect)
     if (d != null && (rep.drop == null || d > rep.drop)) rep.drop = d
-    const l = torsoLean(joints, side, aspect)
+    const l = drill.lean ? drill.lean(joints, side, aspect) : null
     if (l != null && (rep.lean == null || l > rep.lean)) rep.lean = l
     if (angle < rep.min) { rep.min = angle; rep.bottomT = t }
   }
 
-  function count(t) {
-    const depth = rep.drop == null ? null : rep.drop > PARALLEL_BAND ? 'below' : rep.drop < -PARALLEL_BAND ? 'above' : 'parallel'
+  // Closes the rep: counted, or kept as a no-rep. Returns the record.
+  function finish(t) {
+    const depth = drill.depth(rep.drop)
+    const counted = rep.lost || drill.meets(depth, std)
     const done = {
       depth,
       minKnee: Math.round(rep.rawMin),
@@ -198,12 +274,17 @@ export function createSquatTracker() {
       upSec: round1(Math.max(0, t - rep.bottomT) / 1000),
       lean: rep.lean == null ? null : Math.round(rep.lean),
       lost: rep.lost,
+      counted,
+      reason: counted ? null : 'shallow',
       bottomT: rep.bottomT,
       ref: rep.ref,
     }
     reps.push(done)
     closing = done
+    return done
   }
+
+  const countedN = () => reps.filter(r => r.counted).length
 
   function push(frame) {
     const t = Number(frame && frame.t) || 0
@@ -211,9 +292,9 @@ export function createSquatTracker() {
     const aspect = frame && frame.aspect > 0 ? frame.aspect : 1
     for (const s of ['left', 'right']) conf[s] += SIDE_SMOOTH * (chainConf(joints, s) - conf[s])
     const side = conf.left >= conf.right ? 'left' : 'right'
-    const raw = kneeAngle(joints, side, aspect)
-    let justCounted = false
-    const out = inFrame => ({ reps: reps.length, phase, inFrame, justCounted })
+    const raw = drill.angle(joints, side, aspect)
+    let justCounted = false, justMissed = false, reason = null
+    const out = inFrame => ({ reps: countedN(), phase, inFrame, justCounted, justMissed, reason, reached: reachedNow() })
 
     if (raw == null) {
       if (rep) {
@@ -228,14 +309,14 @@ export function createSquatTracker() {
     lastSeenT = t
 
     if (phase === 'waiting') {
-      if (angle >= STAND_ANGLE) { phase = 'standing'; topRef = angle; topT = t }
+      if (angle >= drill.stand) { phase = 'standing'; topRef = angle; topT = t }
       return out(true)
     }
     if (phase === 'standing') {
       if (angle > topRef) topRef = angle
       if (angle >= topRef - TOP_BAND) topT = t
       if (closing && angle >= closing.ref - TOP_BAND) closeUp(t)
-      if (angle < DESCENT_ANGLE) {
+      if (angle < drill.descent) {
         closeUp(topT)
         phase = 'descending'
         rep = { startT: topT, ref: topRef, min: angle, bottomT: t, rawMin: raw, drop: null, lean: null, lost: false }
@@ -251,8 +332,12 @@ export function createSquatTracker() {
       if (angle <= rep.min) phase = 'descending'
       else if (angle > rep.min + ASCENT_RISE) phase = 'ascending'
     } else if (phase === 'ascending' && angle <= rep.min) phase = 'descending'
-    if (phase === 'ascending' && angle >= STAND_ANGLE) {
-      if (rep.rawMin < MIN_REP_ANGLE) { count(t); justCounted = true }
+    if (phase === 'ascending' && angle >= drill.stand) {
+      if (rep.rawMin < drill.minRep) {
+        const done = finish(t)
+        if (done.counted) justCounted = true
+        else { justMissed = true; reason = done.reason }
+      }
       rep = null
       phase = 'standing'
       topRef = angle
@@ -263,9 +348,14 @@ export function createSquatTracker() {
 
   function result() {
     const list = reps.map(({ bottomT, ref, ...r }) => r)
-    const cueId = pickCue(list)
-    return { reps: list, summary: summarise(list), cue: CUE[cueId](), cueId }
+    const counted = list.filter(r => r.counted)
+    const missed = list.length - counted.length
+    const cueId = pickCue(counted, missed)
+    return { reps: list, summary: summarise(counted, missed), cue: drill.cues[cueId](missed, std), cueId, drill: drill.id, standard: std }
   }
 
   return { push, result }
 }
+
+/** The squat tracker: createTracker for the squat drill ({ standard }). */
+export const createSquatTracker = (opts = {}) => createTracker({ ...opts, drill: 'squat' })

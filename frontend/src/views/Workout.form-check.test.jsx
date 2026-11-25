@@ -65,9 +65,13 @@ beforeEach(() => {
   useUI.setState({ sheets: [], toastMsg: '', timer: null, work: null })
   h.available = true; h.runs = []
   h.result = {
-    reps: Array.from({ length: 7 }, () => ({ depth: 'below', minKnee: 55, downSec: 2, upSec: 1, lean: 40, lost: false })),
-    summary: { count: 7, depthBelow: 7, depthParallel: 0, depthAbove: 0, avgDown: 2, avgUp: 1, maxLean: 40, consistency: 2 },
-    cue: 'Depth and tempo held steady across the set.', cueId: 'steady',
+    // Seven counted and one too shallow: "Use 7 reps" takes the counted ones only.
+    reps: [
+      ...Array.from({ length: 7 }, () => ({ depth: 'below', minKnee: 55, downSec: 2, upSec: 1, lean: 40, lost: false, counted: true, reason: null })),
+      { depth: 'above', minKnee: 96, downSec: 1, upSec: 1, lean: 30, lost: false, counted: false, reason: 'shallow' },
+    ],
+    summary: { count: 7, missed: 1, depthBelow: 7, depthParallel: 0, depthAbove: 0, avgDown: 2, avgUp: 1, maxLean: 40, consistency: 2 },
+    cue: 'Reps that did not count: 1. The hip stayed above the knee.', cueId: 'missed', standard: 'parallel',
   }
   root = null; container = null; sheetRoot = null; sheetContainer = null
 })
@@ -118,10 +122,12 @@ describe('Form check on the exercise menu', () => {
     act(() => item.click())
     const intro = renderTopSheet()
     act(() => button(intro, 'Front camera').click())
+    act(() => button(intro, 'Below parallel').click())
     await act(async () => { button(intro, 'Start').click(); await Promise.resolve(); await Promise.resolve() })
-    expect(h.runs[0].camera).toBe('front')
+    expect(h.runs[0]).toMatchObject({ camera: 'front', standard: 'below', drill: 'squat' })
     const result = renderTopSheet()
-    expect(result.querySelector('h3').textContent).toBe('7 reps')
+    expect(result.querySelector('[data-fc-count]').textContent).toBe('7')
+    expect(result.querySelector('[data-fc-missed]').textContent).toBe('1 did not count')
     act(() => button(result, 'Use 7 reps').click())
     const sets = useStore.getState().S.active.entries[0].sets
     expect(sets[1]).toMatchObject({ r: 7, done: false })

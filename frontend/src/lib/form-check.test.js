@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createSquatTracker, framing, kneeAngle, pickSide, isSquatPattern, CUE, FAST_DOWN_SEC } from './form-check.js'
+import { createSquatTracker, createTracker, framing, kneeAngle, pickSide, isSquatPattern, standardFor, depthShare, CUE, DRILLS, FAST_DOWN_SEC, PARALLEL_BAND } from './form-check.js'
 import { EXIDX } from './exercises.js'
 
 // A lifter filmed side-on, drawn from one number: the knee angle (180 is straight). The shin tips
@@ -61,12 +61,20 @@ function setFrames(reps, { side = 'left', noise = 0, seed = 7, gap = null, stand
   return out
 }
 
-const run = frames => {
-  const tr = createSquatTracker()
-  let counted = 0
-  for (const f of frames) if (tr.push(f).justCounted) counted++
-  return { tr, counted, res: tr.result() }
+// `opts`: the tracker's { standard }. Today's tests of depth and the cue read every real descent
+// ('any'); the standards have their own block below.
+const run = (frames, opts = {}) => {
+  const tr = createSquatTracker(opts)
+  let counted = 0, missed = 0
+  const missedAt = []
+  for (const f of frames) {
+    const out = tr.push(f)
+    if (out.justCounted) counted++
+    if (out.justMissed) { missed++; missedAt.push({ t: f.t, reason: out.reason }) }
+  }
+  return { tr, counted, missed, missedAt, res: tr.result() }
 }
+const ANY = { standard: 'any' }
 const same = (n, r) => Array.from({ length: n }, () => ({ ...r }))
 
 describe('kneeAngle and pickSide', () => {
@@ -125,7 +133,7 @@ describe('createSquatTracker', () => {
   })
 
   it('names the depth: below, parallel and above', () => {
-    const { res } = run(setFrames([{ min: 40, down: 2, up: 1 }, { min: 60, down: 2, up: 1 }, { min: 95, down: 2, up: 1 }]))
+    const { res } = run(setFrames([{ min: 40, down: 2, up: 1 }, { min: 60, down: 2, up: 1 }, { min: 95, down: 2, up: 1 }]), ANY)
     expect(res.reps.map(r => r.depth)).toEqual(['below', 'parallel', 'above'])
     expect(res.reps[0].minKnee).toBeLessThan(res.reps[2].minKnee)
     expect(res.summary).toMatchObject({ depthBelow: 1, depthParallel: 1, depthAbove: 1 })
@@ -179,7 +187,7 @@ describe('createSquatTracker', () => {
 
 describe('the cue', () => {
   it('says go deeper when most reps stop above parallel', () => {
-    const { res } = run(setFrames(same(5, { min: 100, down: 2, up: 1 })))
+    const { res } = run(setFrames(same(5, { min: 100, down: 2, up: 1 })), ANY)
     expect(res.summary.depthAbove).toBe(5)
     expect(res.cueId).toBe('deeper')
     expect(res.cue).toBe(CUE.deeper())
@@ -192,7 +200,7 @@ describe('the cue', () => {
   })
 
   it('says the last reps were shallower when depth falls off', () => {
-    const { res } = run(setFrames([50, 50, 52, 55, 70, 78].map(min => ({ min, down: 2, up: 1 }))))
+    const { res } = run(setFrames([50, 50, 52, 55, 70, 78].map(min => ({ min, down: 2, up: 1 }))), ANY)
     expect(res.cueId).toBe('fade')
   })
 
@@ -215,6 +223,131 @@ describe('the cue', () => {
     const { res } = run(setFrames([]))
     expect(res.summary.count).toBe(0)
     expect(res.cueId).toBe('none')
+  })
+})
+
+// The knee angle at which the drawn hip sits `d` thigh lengths below the knee (bisection: the
+// hip drops as the knee bends).
+function thetaForDrop(d) {
+  const dropAt = th => { const j = pose(th); return (j.leftHip[1] - j.leftKnee[1]) / Math.hypot(j.leftHip[0] - j.leftKnee[0], j.leftHip[1] - j.leftKnee[1]) }
+  let lo = 30, hi = 120
+  for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (dropAt(m) > d) lo = m; else hi = m }
+  return (lo + hi) / 2
+}
+
+describe('drills and standards', () => {
+  // Full: hip well below the knee. Parallel: hip at knee height. Shallow: a real descent above it.
+  const FULL = { min: 45, down: 2, up: 1 }, PAR = { min: 60, down: 2, up: 1 }, SHALLOW = { min: 95, down: 2, up: 1 }
+  const mixed = () => setFrames([FULL, SHALLOW, PAR, FULL, SHALLOW])
+
+  it('has the squat drill with its standards, parallel by default', () => {
+    expect(DRILLS.squat).toMatchObject({ id: 'squat', standards: ['parallel', 'below', 'any'], defaultStandard: 'parallel' })
+    expect(standardFor('squat', 'below')).toBe('below')
+    expect(standardFor('squat', 'knee-deep')).toBe('parallel')
+    expect(standardFor('squat')).toBe('parallel')
+    expect(standardFor('bench')).toBe(null)
+    expect(() => createTracker({ drill: 'bench' })).toThrow()
+    expect(createTracker().result()).toMatchObject({ drill: 'squat', standard: 'parallel' })
+  })
+
+  it('parallel (the default): counts the full and parallel reps, keeps the shallow ones as no-reps', () => {
+    const { counted, missed, missedAt, res } = run(mixed())
+    expect(counted).toBe(3)
+    expect(missed).toBe(2)
+    expect(missedAt.map(m => m.reason)).toEqual(['shallow', 'shallow'])
+    expect(res.reps.map(r => r.counted)).toEqual([true, false, true, true, false])
+    expect(res.reps.map(r => r.reason)).toEqual([null, 'shallow', null, null, 'shallow'])
+    expect(res.summary).toMatchObject({ count: 3, missed: 2, depthAbove: 0 })
+    expect(res.standard).toBe('parallel')
+  })
+
+  it('below: only the reps with the hip clearly under the knee count', () => {
+    const { counted, missed, res } = run(mixed(), { standard: 'below' })
+    expect(counted).toBe(2)
+    expect(missed).toBe(3)
+    expect(res.reps.map(r => r.counted)).toEqual([true, false, false, true, false])
+    expect(res.summary).toMatchObject({ count: 2, missed: 3, depthBelow: 2, depthParallel: 0 })
+  })
+
+  it('any: every real descent counts, as before the standards; a wobble still does not', () => {
+    const { counted, missed, res } = run(setFrames([FULL, SHALLOW, { min: 150, down: 0.5, up: 0.5 }, PAR]), ANY)
+    expect(counted).toBe(3)
+    expect(missed).toBe(0)
+    expect(res.reps).toHaveLength(3)
+    expect(res.reps.every(r => r.counted)).toBe(true)
+  })
+
+  it('says justMissed on the frame the no-rep ends, the same frame justCounted would be', () => {
+    const frames = setFrames([SHALLOW])
+    const asParallel = run(frames)
+    const asAny = run(frames, ANY)
+    expect(asParallel.missedAt).toHaveLength(1)
+    const tr = createSquatTracker(ANY)
+    const countedAt = frames.find(f => tr.push(f).justCounted).t
+    expect(asParallel.missedAt[0].t).toBe(countedAt)
+    expect(asAny.counted).toBe(1)
+    // The count does not move on a no-rep.
+    const live = createSquatTracker()
+    const outs = frames.map(f => live.push(f))
+    expect(outs.every(o => o.reps === 0)).toBe(true)
+    expect(outs.filter(o => o.justMissed)).toHaveLength(1)
+    expect(outs.filter(o => o.justCounted)).toHaveLength(0)
+  })
+
+  it('takes the parallel band at its edge: just inside counts, just outside does not', () => {
+    const edge = thetaForDrop(-PARALLEL_BAND)
+    const inside = run(setFrames([{ min: edge - 1, down: 2, up: 1 }]))
+    const outside = run(setFrames([{ min: edge + 1, down: 2, up: 1 }]))
+    expect(inside.res.reps[0]).toMatchObject({ depth: 'parallel', counted: true })
+    expect(outside.res.reps[0]).toMatchObject({ depth: 'above', counted: false, reason: 'shallow' })
+    // And the edge of "below": the same band on the other side of the knee.
+    const low = thetaForDrop(PARALLEL_BAND)
+    expect(run(setFrames([{ min: low - 1, down: 2, up: 1 }]), { standard: 'below' }).counted).toBe(1)
+    expect(run(setFrames([{ min: low + 1, down: 2, up: 1 }]), { standard: 'below' }).missed).toBe(1)
+  })
+
+  it('says mid-rep once the standard is reached, and not before', () => {
+    const tr = createSquatTracker()
+    const outs = setFrames([PAR]).map(f => tr.push(f))
+    const first = outs.findIndex(o => o.reached)
+    expect(first).toBeGreaterThan(0)
+    expect(outs[first].phase).toBe('descending')
+    expect(outs.at(-1).reached).toBe(false)
+    const shallow = createSquatTracker()
+    expect(setFrames([SHALLOW]).map(f => shallow.push(f)).some(o => o.reached)).toBe(false)
+  })
+
+  it('times and measures the set over the counted reps only', () => {
+    const { res } = run(setFrames([{ min: 45, down: 2, up: 1 }, { min: 95, down: 0.6, up: 0.6 }, { min: 45, down: 2, up: 1 }]))
+    expect(res.summary.count).toBe(2)
+    expect(res.summary.avgDown).toBeGreaterThan(1.8)
+    expect(res.summary.consistency).toBeLessThan(5)
+  })
+
+  it('counts a rep the camera lost for a moment whatever depth was seen, as before', () => {
+    // The shallow rep is under way from about 5.9 s (knee past 150°) to 7.1 s: drop half a second.
+    const { res } = run(setFrames([FULL, SHALLOW, FULL], { gap: [6300, 6800] }))
+    expect(res.reps.map(r => [r.lost, r.counted])).toEqual([[false, true], [true, true], [false, true]])
+  })
+
+  it('reads how many of every rep reached the depth, no-reps included', () => {
+    const { res } = run(mixed())
+    expect(depthShare(res.reps, 'parallel')).toEqual({ hit: 3, of: 5, depth: 'parallel' })
+    expect(depthShare(res.reps, 'any')).toEqual({ hit: 3, of: 5, depth: 'parallel' })
+    expect(depthShare(res.reps, 'below')).toEqual({ hit: 2, of: 5, depth: 'below' })
+    expect(depthShare(null, 'below')).toEqual({ hit: 0, of: 0, depth: 'below' })
+  })
+
+  it('puts the no-reps first in the cue, with how many and why', () => {
+    const { res } = run(mixed())
+    expect(res.cueId).toBe('missed')
+    expect(res.cue).toBe('Reps that did not count: 2. The hip stayed above the knee.')
+    const below = run(mixed(), { standard: 'below' }).res
+    expect(below.cue).toBe('Reps that did not count: 3. The hip did not get below the knee.')
+    // Every rep missed: still the no-rep cue, not "no reps were counted".
+    const none = run(setFrames(same(3, SHALLOW))).res
+    expect(none.summary).toMatchObject({ count: 0, missed: 3, avgDown: null })
+    expect(none.cueId).toBe('missed')
   })
 })
 

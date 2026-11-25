@@ -16,7 +16,11 @@ import Vision
  *   FormCheck.addListener('pose', e => ...)          { t: ms, aspect: w / h, joints: { leftHip: [x, y, conf], ... } }
  *   FormCheck.addListener('closed', () => ...)       Done tapped, or stop()
  *   await FormCheck.start({ camera: 'back' | 'front', labels: { done, flip } })
- *   await FormCheck.setStatus({ text, reps })        the status line and the big rep count
+ *   await FormCheck.setStatus({ text, reps, reached }) the status line, the big rep count, and
+ *                                                    whether the rep under way is deep enough (the hips light up)
+ *   await FormCheck.feedback({ kind, text })         'counted': a green flash of the screen edge and a
+ *                                                    light tap; 'missed': a red flash and an error buzz,
+ *                                                    `text` read out to VoiceOver. The count does not move.
  *   await FormCheck.stop()
  *
  * Joints are in normalised image coordinates with y growing downward (Vision's origin is the
@@ -31,6 +35,7 @@ public class FormCheckPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "available", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "start", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "feedback", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
     ]
 
@@ -81,8 +86,18 @@ public class FormCheckPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func setStatus(_ call: CAPPluginCall) {
         let text = call.getString("text") ?? ""
         let reps = call.getInt("reps") ?? 0
+        let reached = call.getBool("reached") ?? false
         DispatchQueue.main.async {
-            self.shown?.setStatus(text, reps: reps)
+            self.shown?.setStatus(text, reps: reps, reached: reached)
+            call.resolve()
+        }
+    }
+
+    @objc func feedback(_ call: CAPPluginCall) {
+        let missed = call.getString("kind") == "missed"
+        let text = call.getString("text") ?? ""
+        DispatchQueue.main.async {
+            self.shown?.feedback(missed: missed, text: text)
             call.resolve()
         }
     }
@@ -112,6 +127,8 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
     private let skeleton = SkeletonView()
     private let status = UILabel()
     private let reps = UILabel()
+    private let edge = UIView()
+    private let haptics = UINotificationFeedbackGenerator()
     private var lastSent: Double = 0       // video queue only
     private var wasIdleDisabled = false
     private var closed = false
@@ -189,6 +206,13 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
         let flip = UIButton(configuration: flipConfig, primaryAction: UIAction { [weak self] _ in self?.flipCamera() })
         flip.accessibilityLabel = flipTitle
 
+        // The flash: a coloured frame round the screen, faded in and out on each rep.
+        edge.isUserInteractionEnabled = false
+        edge.backgroundColor = .clear
+        edge.layer.borderWidth = 14
+        edge.alpha = 0
+        view.addSubview(edge)
+
         for v in [reps, status, done, flip] as [UIView] {
             v.translatesAutoresizingMaskIntoConstraints = false
             view.addSubview(v)
@@ -223,6 +247,7 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
         super.viewDidLayoutSubviews()
         preview.frame = view.bounds
         skeleton.frame = view.bounds
+        edge.frame = view.bounds
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -242,7 +267,8 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
         }
     }
 
-    func setStatus(_ text: String, reps count: Int) {
+    func setStatus(_ text: String, reps count: Int, reached: Bool) {
+        skeleton.reached = reached
         status.text = text
         status.isHidden = text.isEmpty
         let shownCount = String(count)
@@ -250,6 +276,18 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
             reps.text = shownCount
             UIAccessibility.post(notification: .announcement, argument: shownCount)
         }
+    }
+
+    func feedback(missed: Bool, text: String) {
+        edge.layer.borderColor = (missed ? UIColor.systemRed : UIColor.systemGreen).cgColor
+        edge.layer.removeAllAnimations()
+        edge.alpha = 1
+        UIView.animate(withDuration: missed ? 0.9 : 0.5, delay: 0.15, options: [.curveEaseOut, .allowUserInteraction]) {
+            self.edge.alpha = 0
+        }
+        haptics.notificationOccurred(missed ? .error : .success)
+        haptics.prepare()
+        if missed && !text.isEmpty { UIAccessibility.post(notification: .announcement, argument: text) }
     }
 
     // Session queue only.
@@ -353,6 +391,8 @@ final class FormCheckViewController: UIViewController, AVCaptureVideoDataOutputS
 final class SkeletonView: UIView {
     var imageRect: CGRect = .zero
     var joints: [String: CGPoint] = [:] { didSet { setNeedsDisplay() } }
+    /// The rep under way is deep enough to count: the hips are drawn larger and green.
+    var reached = false { didSet { if reached != oldValue { setNeedsDisplay() } } }
 
     private static let bones: [(String, String)] = [
         ("nose", "neck"), ("neck", "leftShoulder"), ("neck", "rightShoulder"),
@@ -382,6 +422,17 @@ final class SkeletonView: UIView {
         for p in joints.values {
             let c = place(p)
             ctx.fillEllipse(in: CGRect(x: c.x - 5, y: c.y - 5, width: 10, height: 10))
+        }
+        guard reached else { return }
+        ctx.setFillColor(UIColor.systemGreen.cgColor)
+        ctx.setStrokeColor(UIColor.white.cgColor)
+        ctx.setLineWidth(3)
+        for key in ["leftHip", "rightHip"] {
+            guard let p = joints[key] else { continue }
+            let c = place(p)
+            let dot = CGRect(x: c.x - 11, y: c.y - 11, width: 22, height: 22)
+            ctx.fillEllipse(in: dot)
+            ctx.strokeEllipse(in: dot)
         }
     }
 }
