@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { DRILLS, checkDrill, drillById, drillFor, drillStrings, standardFor } from './index.js'
-import { EXIDX } from '../exercises.js'
+import { EXDB, EXIDX } from '../exercises.js'
 
 const localesDir = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'locales')
 const packs = await Promise.all(readdirSync(localesDir).filter(f => f.endsWith('.js')).map(async f => [f, (await import(pathToFileURL(join(localesDir, f)).href)).default]))
@@ -53,6 +53,27 @@ describe('the registry', () => {
     expect(drillFor(EXIDX['0289'])).toBe(null)
     expect(drillFor(null)).toBe(null)
     expect(drillById('bench')).toBe(null)
+  })
+
+  it('judges no catalogue exercise with two drills', () => {
+    const twice = EXDB
+      .map(ex => [ex.id, ex.n, DRILLS.filter(d => d.matches(ex)).map(d => d.id)])
+      .filter(([, , ids]) => ids.length > 1)
+    expect(twice).toEqual([])
+  })
+
+  // The owner's own plan: the drill each of its exercises gets, and the ones left without one
+  // (a bench press, a deadlift from the floor, a hip thrust, a dead bug, a machine fly: no drill
+  // reads them reliably from a 2D pose yet).
+  it.each([
+    ['3593', 'squat'], ['2966', 'squat'], ['1459', 'romanian-deadlift'], ['2290', 'split-squat'],
+    ['1326', 'pull-up'], ['0499', 'inverted-row'], ['2500', 'rear-fly'], ['9698', 'chest-supported-row'],
+    ['0200', 'triceps-pushdown'], ['0313', 'curl'], ['0334', 'lateral-raise'], ['0715', 'side-plank'],
+    ['0289', null], ['0047', null], ['0032', null], ['2146', null], ['0276', null], ['0596', null],
+  ])('puts exercise %s under %s', (id, drill) => {
+    expect(EXIDX[id]).toBeTruthy()
+    expect(drillFor(EXIDX[id])?.id ?? null).toBe(drill)
+    expect(DRILLS.filter(d => d.matches(EXIDX[id])).length).toBe(drill ? 1 : 0)
   })
 
   it('keeps a standard that is the drill’s and falls back to its default otherwise', () => {

@@ -1,8 +1,29 @@
 // The Form check drills (README.md). One import line per drill: the order is the order
 // drillFor() asks them in, so a more particular drill goes before a broader one.
+// index.test.js runs the whole catalogue through every drill: no exercise matches two.
 import squat from './squat.js'
+import splitSquat from './split-squat.js'
+import romanianDeadlift from './romanian-deadlift.js'
+import pullUp from './pull-up.js'
+import invertedRow from './inverted-row.js'
+import chestSupportedRow from './chest-supported-row.js'
+import rearFly from './rear-fly.js'
+import pushUp from './push-up.js'
+import dip from './dip.js'
+import overheadPress from './overhead-press.js'
+import tricepsPushdown from './triceps-pushdown.js'
+import curl from './curl.js'
+import lateralRaise from './lateral-raise.js'
+import sidePlank from './side-plank.js'
+import plank from './plank.js'
 
-export const DRILLS = [squat]
+export const DRILLS = [
+  squat, splitSquat, romanianDeadlift,
+  pullUp, invertedRow, chestSupportedRow, rearFly,
+  pushUp, dip, overheadPress, tricepsPushdown,
+  curl, lateralRaise,
+  sidePlank, plank,
+]
 
 const BY_ID = new Map(DRILLS.map(d => [d.id, d]))
 
